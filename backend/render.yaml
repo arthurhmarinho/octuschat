@@ -1,0 +1,24 @@
+# Blueprint do Render (https://render.com/docs/blueprint-spec).
+# As variáveis sem valor devem ser preenchidas no painel do Render.
+services:
+  - type: web
+    name: inboxpilot-backend
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: FRONTEND_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: META_APP_ID
+        sync: false
+      - key: META_APP_SECRET
+        sync: false
+      - key: WEBHOOK_VERIFY_TOKEN
+        sync: false
+      - key: OAUTH_REDIRECT_URI
+        sync: false

@@ -1,0 +1,9 @@
+# Driver psycopg3 (wheels prontas, inclusive Python 3.14) em vez de asyncpg.
+fastapi>=0.118
+uvicorn>=0.34
+pydantic>=2.13
+pydantic-settings>=2.7
+httpx>=0.28
+python-dotenv>=1.0
+SQLAlchemy[asyncio]>=2.0.36
+psycopg[binary]>=3.3

@@ -1,0 +1,14 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "frontend",
+      "runtimeExecutable": "cmd.exe",
+      "runtimeArgs": [
+        "/c",
+        "cd /d frontend && C:\\PROGRA~1\\nodejs\\node.exe node_modules/next/dist/bin/next dev"
+      ],
+      "port": 3000
+    }
+  ]
+}

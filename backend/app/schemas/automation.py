@@ -1,0 +1,50 @@
+"""Schemas de entrada/saída para automações."""
+
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, model_validator
+
+from app.models.automation import TriggerType
+
+
+class AutomationBase(BaseModel):
+    name: str
+    trigger: TriggerType
+    keyword: str | None = None
+    post_id: str | None = None
+    reply_message: str
+    link_url: str | None = None
+    link_label: str | None = None
+    enabled: bool = True
+
+    @model_validator(mode="after")
+    def _validate(self):
+        if self.trigger == TriggerType.COMMENT_KEYWORD and not self.keyword:
+            raise ValueError("keyword é obrigatória quando trigger é comment_keyword")
+        if self.link_url and not self.link_url.startswith(("http://", "https://")):
+            raise ValueError("link_url deve começar com http:// ou https://")
+        if self.link_label and not self.link_url:
+            raise ValueError("link_url é obrigatório quando há link_label")
+        return self
+
+
+class AutomationCreate(AutomationBase):
+    account_id: str
+
+
+class AutomationUpdate(BaseModel):
+    name: str | None = None
+    keyword: str | None = None
+    post_id: str | None = None
+    reply_message: str | None = None
+    link_url: str | None = None
+    link_label: str | None = None
+    enabled: bool | None = None
+
+
+class AutomationRead(AutomationBase):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    account_id: str
+    created_at: datetime

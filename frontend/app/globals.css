@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: #070b14;
+  --bg-soft: #0b1220;
+  --surface: rgba(255, 255, 255, 0.03);
+  --border: rgba(255, 255, 255, 0.08);
+  --fg: #e8edf6;
+  --muted: #8b94a7;
+  --gold: #f5c451;
+  --gold-deep: #d9a335;
+  --green: #34d399;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Grade sutil + brilho radial de fundo */
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+.grid-bg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(900px 500px at 75% 0%, rgba(245, 196, 81, 0.08), transparent 70%),
+    radial-gradient(700px 500px at 10% 10%, rgba(52, 211, 153, 0.06), transparent 70%);
+}
+
+/* Componentes reutilizáveis */
+.glass {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  backdrop-filter: blur(12px);
+  border-radius: 1rem;
+}
+
+.mono {
+  font-family: ui-monospace, "Cascadia Code", "Consolas", monospace;
+}
+
+.text-gold-gradient {
+  background: linear-gradient(180deg, #f8d987 0%, var(--gold) 45%, var(--gold-deep) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.btn-gold {
+  background: linear-gradient(180deg, #f8d987, var(--gold-deep));
+  color: #2a1e05;
+  font-weight: 700;
+  box-shadow: 0 8px 30px -8px rgba(245, 196, 81, 0.5);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.btn-gold:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 36px -8px rgba(245, 196, 81, 0.65);
+}
+
+.btn-ghost {
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--fg);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.btn-ghost:hover {
+  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  padding: 0.4rem 0.85rem;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--green);
+  box-shadow: 0 0 10px 1px rgba(52, 211, 153, 0.7);
+}
