@@ -2,33 +2,44 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Images, Image as ImageIcon } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import DmPreview from "@/components/DmPreview";
+import PostPicker from "@/components/PostPicker";
+import { useAccount } from "@/lib/account";
 
 type Trigger = "comment_any" | "comment_keyword";
+type Scope = "all" | "specific";
 type SaveState = { kind: "idle" | "saving" | "ok" | "error"; msg?: string };
 
 export default function NewAutomationPage() {
+  const { accountId } = useAccount();
   const [name, setName] = useState("");
   const [trigger, setTrigger] = useState<Trigger>("comment_keyword");
   const [keyword, setKeyword] = useState("");
+  const [scope, setScope] = useState<Scope>("all");
+  const [postId, setPostId] = useState("");
   const [replyMessage, setReplyMessage] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [linkLabel, setLinkLabel] = useState("");
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
 
   async function handleSave() {
+    if (!accountId) {
+      setSave({ kind: "error", msg: "Nenhuma conta do Instagram conectada." });
+      return;
+    }
     setSave({ kind: "saving" });
     try {
       const res = await fetch("/api/backend/automations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          account_id: "demo", // TODO: usar a conta conectada real
+          account_id: accountId,
           name,
           trigger,
           keyword: trigger === "comment_keyword" ? keyword : null,
+          post_id: scope === "specific" ? postId || null : null,
           reply_message: replyMessage,
           link_url: linkUrl || null,
           link_label: linkLabel || null,
@@ -100,6 +111,42 @@ export default function NewAutomationPage() {
                 />
               </div>
             )}
+
+            <div>
+              <label className={labelCls}>Aplicar em</label>
+              <div className="grid grid-cols-2 gap-3">
+                {(
+                  [
+                    { v: "all", Icon: Images, t: "Todas as publicações", d: "Vale para qualquer post ou Reel." },
+                    { v: "specific", Icon: ImageIcon, t: "Publicação específica", d: "Escolha um post ou Reel." },
+                  ] as const
+                ).map(({ v, Icon, t, d }) => {
+                  const active = scope === v;
+                  return (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setScope(v)}
+                      className={`rounded-lg border p-3 text-left transition-colors ${
+                        active
+                          ? "border-[var(--gold)] bg-[var(--gold)]/10"
+                          : "border-[var(--border)] hover:border-white/20"
+                      }`}
+                    >
+                      <Icon size={18} className={active ? "text-[var(--gold)]" : "text-[var(--muted)]"} />
+                      <p className="mt-2 text-sm font-medium">{t}</p>
+                      <p className="text-xs text-[var(--muted)]">{d}</p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {scope === "specific" && accountId && (
+                <div className="mt-3">
+                  <PostPicker accountId={accountId} value={postId} onChange={setPostId} />
+                </div>
+              )}
+            </div>
 
             <div>
               <label className={labelCls}>Mensagem (texto)</label>

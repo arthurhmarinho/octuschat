@@ -55,6 +55,7 @@ async def process_comment(
 
     # Dispara a primeira automação que casou (1 resposta privada por comentário).
     auto = matches[0]
+    body = compose_message(auto.reply_message, auto.link_url, auto.link_label)
     log = MessageLog(
         automation_id=auto.id,
         comment_id=comment_id,
@@ -65,7 +66,7 @@ async def process_comment(
         await reply_privately_to_comment(
             ig_user_id=account.ig_user_id,
             comment_id=comment_id,
-            text=compose_message(auto.reply_message, auto.link_url, auto.link_label),
+            text=body,
             access_token=account.access_token,
         )
         logger.info("Automação '%s' disparada para %s.", auto.name, from_user)
@@ -76,3 +77,29 @@ async def process_comment(
 
     db.add(log)
     await db.commit()
+
+    # Registra contato + mensagem de saída (alimenta Conversas/Contatos).
+    if log.status == "sent" and from_user:
+        contact = await crud.contact.upsert(db, account_id, from_user)
+        await crud.message.create(
+            db, account_id, contact.id, "out", body, "comment_reply"
+        )
+
+
+async def process_inbound_message(
+    db: AsyncSession,
+    account_id: str,
+    sender_id: str,
+    text: str,
+) -> None:
+    """Registra uma DM recebida do contato (resposta dele) para as Conversas."""
+    if not (sender_id and text):
+        return
+    # Ignora eco das mensagens enviadas pela própria conta.
+    if sender_id == account_id:
+        return
+    if await crud.account.get(db, account_id) is None:
+        return
+    contact = await crud.contact.upsert(db, account_id, sender_id)
+    await crud.message.create(db, account_id, contact.id, "in", text, "dm")
+    logger.info("Mensagem recebida de %s registrada.", sender_id)

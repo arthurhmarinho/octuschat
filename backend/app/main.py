@@ -8,7 +8,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import init_db
-from app.routers import automations, health, instagram, webhooks
+from app.routers import (
+    automations,
+    contacts,
+    conversations,
+    health,
+    instagram,
+    webhooks,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -39,3 +46,5 @@ app.include_router(health.router)
 app.include_router(webhooks.router)
 app.include_router(instagram.router)
 app.include_router(automations.router)
+app.include_router(contacts.router)
+app.include_router(conversations.router)

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Plus, Workflow, KeyRound, MessageSquareReply } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import { useAccount } from "@/lib/account";
 
 type Automation = {
   id: number;
@@ -17,18 +18,24 @@ type Automation = {
 type LoadState = "loading" | "ready" | "error";
 
 export default function AutomationsPage() {
+  const { accountId, resolved } = useAccount();
   const [items, setItems] = useState<Automation[]>([]);
   const [state, setState] = useState<LoadState>("loading");
 
   useEffect(() => {
-    fetch("/api/backend/automations?account_id=demo")
+    if (!resolved) return;
+    if (!accountId) {
+      setState("ready");
+      return;
+    }
+    fetch(`/api/backend/automations?account_id=${accountId}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data) => {
         setItems(data);
         setState("ready");
       })
       .catch(() => setState("error"));
-  }, []);
+  }, [accountId, resolved]);
 
   const newButton = (
     <Link href="/automations/new" className="btn-gold inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm">

@@ -4,7 +4,9 @@ import httpx
 
 from app.core.config import settings
 
-GRAPH_BASE = "https://graph.facebook.com"
+# Fluxo "Instagram API with Instagram Login": host é graph.instagram.com
+# (o token IGAA... NÃO funciona em graph.facebook.com).
+GRAPH_BASE = "https://graph.instagram.com"
 
 
 async def reply_privately_to_comment(
@@ -26,6 +28,36 @@ async def reply_privately_to_comment(
         )
         resp.raise_for_status()
         return resp.json()
+
+
+async def get_profile(ig_user_id: str, access_token: str) -> dict:
+    """Busca dados básicos do perfil (user_id, username)."""
+    url = f"{GRAPH_BASE}/{settings.graph_api_version}/me"
+    params = {"fields": "user_id,username", "access_token": access_token}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def list_media(
+    ig_user_id: str, access_token: str, limit: int = 24
+) -> list[dict]:
+    """Lista as publicações/Reels da conta (para o seletor de post).
+
+    NÃO testado contra a Meta real ainda (precisa de token válido). Quando o
+    Instagram estiver conectado, alimenta a grade visual do builder.
+    """
+    url = f"{GRAPH_BASE}/{settings.graph_api_version}/{ig_user_id}/media"
+    params = {
+        "fields": "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp",
+        "limit": limit,
+        "access_token": access_token,
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json().get("data", [])
 
 
 async def send_direct_message(

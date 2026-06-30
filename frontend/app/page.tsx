@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { MessageCircle, Zap, Reply, ArrowRight } from "lucide-react";
+import { MessageCircle, Zap, Reply, ArrowRight, Instagram } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import { useAccount } from "@/lib/account";
 
 type HealthState = "checking" | "online" | "offline";
 
@@ -30,12 +31,15 @@ const TEMPLATES = [
 
 export default function Home() {
   const [backend, setBackend] = useState<HealthState>("checking");
+  const { account, resolved } = useAccount();
 
   useEffect(() => {
     fetch("/api/backend/health")
       .then((r) => setBackend(r.ok ? "online" : "offline"))
       .catch(() => setBackend("offline"));
   }, []);
+
+  const isReal = account && account.ig_user_id !== "demo";
 
   return (
     <AppShell title="Inicial">
@@ -49,8 +53,12 @@ export default function Home() {
             <span className={`dot ${backend !== "online" ? "!bg-amber-400 !shadow-none" : ""}`} />
             Backend {backend === "checking" ? "…" : backend}
           </span>
-          <span>0 contas conectadas</span>
-          <span>0 automações ativas</span>
+          {resolved && (
+            <span className="flex items-center gap-1.5">
+              <Instagram size={14} className="text-pink-500" />
+              {isReal ? `@${account!.username ?? account!.ig_user_id}` : "nenhuma conta conectada"}
+            </span>
+          )}
         </div>
       </div>
 

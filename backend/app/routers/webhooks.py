@@ -1,5 +1,6 @@
 """Webhooks da Meta para eventos do Instagram (comentários)."""
 
+import json
 import logging
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
@@ -7,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.database import get_session
-from app.services.automation_engine import process_comment
+from app.core.security import verify_meta_signature
+from app.services.automation_engine import process_comment, process_inbound_message
 
 logger = logging.getLogger("inboxpilot.webhooks")
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -28,11 +30,25 @@ async def verify_webhook(
 @router.post("/instagram")
 async def receive_event(request: Request, db: AsyncSession = Depends(get_session)):
     """Recebe notificações de eventos e dispara automações."""
-    body = await request.json()
+    raw = await request.body()
+
+    # Segurança: valida a assinatura da Meta. Se o App Secret ainda não foi
+    # configurado (dev), apenas avisa — em produção a verificação é obrigatória.
+    signature = request.headers.get("X-Hub-Signature-256")
+    if settings.meta_app_secret:
+        if not verify_meta_signature(raw, signature, settings.meta_app_secret):
+            logger.warning("Assinatura do webhook inválida — rejeitado.")
+            return Response(status_code=status.HTTP_403_FORBIDDEN)
+    else:
+        logger.warning("META_APP_SECRET vazio — pulando verificação (apenas dev).")
+
+    body = json.loads(raw)
     logger.info("Webhook recebido: %s", body)
 
     for entry in body.get("entry", []):
         account_id = str(entry.get("id", ""))
+
+        # Comentários (campo "comments") → dispara automações.
         for change in entry.get("changes", []):
             if change.get("field") != "comments":
                 continue
@@ -44,6 +60,18 @@ async def receive_event(request: Request, db: AsyncSession = Depends(get_session
                 text=value.get("text", ""),
                 post_id=(value.get("media") or {}).get("id"),
                 from_user=(value.get("from") or {}).get("id"),
+            )
+
+        # Mensagens recebidas (DMs) → registra na conversa.
+        for event in entry.get("messaging", []):
+            message = event.get("message") or {}
+            if message.get("is_echo"):
+                continue
+            await process_inbound_message(
+                db=db,
+                account_id=account_id,
+                sender_id=(event.get("sender") or {}).get("id", ""),
+                text=message.get("text", ""),
             )
 
     # A Meta espera 200 rápido.
