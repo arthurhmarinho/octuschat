@@ -77,9 +77,13 @@ async def reply_privately_to_comment(
 
 
 async def get_profile(ig_user_id: str, access_token: str) -> dict:
-    """Busca dados básicos do perfil (user_id, username)."""
+    """Busca dados básicos do perfil (id, user_id, username).
+
+    `id` costuma ser o identificador usado nos webhooks (entry.id); `user_id`
+    é o usado nas chamadas da Graph API. Podem ser diferentes.
+    """
     url = f"{GRAPH_BASE}/{settings.graph_api_version}/me"
-    params = {"fields": "user_id,username", "access_token": access_token}
+    params = {"fields": "id,user_id,username", "access_token": access_token}
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.get(url, params=params)
         resp.raise_for_status()

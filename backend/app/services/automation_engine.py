@@ -45,11 +45,14 @@ async def process_comment(
         logger.info("Comentário %s já processado, ignorando.", comment_id)
         return
 
-    account = await crud.account.get(db, account_id)
+    # O webhook identifica a conta por ig_id (≠ ig_user_id); casa por qualquer um.
+    account = await crud.account.get_by_any_id(db, account_id)
     if account is None:
         logger.warning("Conta %s não conectada; nada a fazer.", account_id)
         return
     account = await token_service.ensure_fresh(db, account)
+    # Canoniza para o ig_user_id (chave das automações/contatos, usada no front).
+    account_id = account.ig_user_id
 
     matches = await crud.automation.find_matching(db, account_id, text, post_id)
     if not matches:
@@ -97,10 +100,12 @@ async def process_inbound_message(
     """Registra uma DM recebida do contato (resposta dele) para as Conversas."""
     if not (sender_id and text):
         return
-    # Ignora eco das mensagens enviadas pela própria conta.
-    if sender_id == account_id:
+    account = await crud.account.get_by_any_id(db, account_id)
+    if account is None:
         return
-    if await crud.account.get(db, account_id) is None:
+    account_id = account.ig_user_id  # canoniza
+    # Ignora eco das mensagens enviadas pela própria conta.
+    if sender_id in (account_id, account.ig_id):
         return
     contact = await crud.contact.upsert(db, account_id, sender_id)
     await crud.message.create(db, account_id, contact.id, "in", text, "dm")

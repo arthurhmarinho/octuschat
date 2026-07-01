@@ -78,11 +78,13 @@ async def callback(code: str = "", db: AsyncSession = Depends(get_session)):
     except Exception as exc:  # noqa: BLE001
         logger.warning("Falha ao trocar por token longo: %s", exc)
 
-    # Busca o username pra exibição (best-effort).
+    # Busca perfil: username + o `id` (usado no webhook, difere do user_id).
     username = None
+    ig_id = None
     try:
         profile = await instagram_api.get_profile(ig_user_id, access_token)
         username = profile.get("username")
+        ig_id = profile.get("id")
     except Exception as exc:  # noqa: BLE001
         logger.warning("Não consegui buscar o perfil: %s", exc)
 
@@ -92,6 +94,7 @@ async def callback(code: str = "", db: AsyncSession = Depends(get_session)):
         access_token=access_token,
         username=username,
         token_expires_at=expires_at,
+        ig_id=ig_id,
     )
 
     # Inscreve o app nos webhooks da conta (comentários + mensagens).
@@ -119,11 +122,25 @@ async def account_subscription(
     Também tenta (re)inscrever, retornando o resultado — útil se a inscrição
     do OAuth falhou silenciosamente.
     """
-    account = await crud.account.get(db, account_id)
+    account = await crud.account.get_by_any_id(db, account_id)
     if account is None:
         raise HTTPException(404, "Conta do Instagram não conectada")
     account = await token_service.ensure_fresh(db, account)
-    result: dict = {}
+    result: dict = {"ig_user_id": account.ig_user_id, "ig_id": account.ig_id}
+
+    # Backfill do ig_id (id usado no webhook) sem precisar reconectar.
+    try:
+        profile = await instagram_api.get_profile(
+            account.ig_user_id, account.access_token
+        )
+        result["profile"] = profile
+        if profile.get("id") and profile.get("id") != account.ig_id:
+            account.ig_id = profile.get("id")
+            await db.commit()
+            result["ig_id_updated"] = account.ig_id
+    except Exception as exc:  # noqa: BLE001
+        result["profile_error"] = str(exc)
+
     try:
         result["subscribe_now"] = await instagram_api.subscribe_webhooks(
             account.ig_user_id, account.access_token
