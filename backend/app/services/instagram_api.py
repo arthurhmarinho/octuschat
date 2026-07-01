@@ -9,6 +9,43 @@ from app.core.config import settings
 GRAPH_BASE = "https://graph.instagram.com"
 
 
+async def exchange_for_long_lived(short_token: str) -> dict:
+    """Troca o token curto (~1h) por um de longa duração (~60 dias)."""
+    url = f"{GRAPH_BASE}/access_token"
+    params = {
+        "grant_type": "ig_exchange_token",
+        "client_secret": settings.meta_app_secret,
+        "access_token": short_token,
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json()  # { access_token, token_type, expires_in }
+
+
+async def refresh_long_lived(long_token: str) -> dict:
+    """Renova um token de longa duração (válido: >24h de idade e <60 dias)."""
+    url = f"{GRAPH_BASE}/refresh_access_token"
+    params = {"grant_type": "ig_refresh_token", "access_token": long_token}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json()  # { access_token, token_type, expires_in }
+
+
+async def subscribe_webhooks(ig_user_id: str, access_token: str) -> dict:
+    """Inscreve o app nos webhooks da conta (comentários + mensagens)."""
+    url = f"{GRAPH_BASE}/{settings.graph_api_version}/{ig_user_id}/subscribed_apps"
+    params = {
+        "subscribed_fields": "comments,messages",
+        "access_token": access_token,
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(url, params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def reply_privately_to_comment(
     ig_user_id: str, comment_id: str, text: str, access_token: str
 ) -> dict:

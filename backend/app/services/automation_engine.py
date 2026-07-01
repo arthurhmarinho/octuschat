@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
 from app.models.message_log import MessageLog
+from app.services import token_service
 from app.services.instagram_api import reply_privately_to_comment
 
 logger = logging.getLogger("inboxpilot.engine")
@@ -48,6 +49,7 @@ async def process_comment(
     if account is None:
         logger.warning("Conta %s não conectada; nada a fazer.", account_id)
         return
+    account = await token_service.ensure_fresh(db, account)
 
     matches = await crud.automation.find_matching(db, account_id, text, post_id)
     if not matches:

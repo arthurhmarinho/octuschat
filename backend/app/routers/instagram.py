@@ -1,6 +1,7 @@
 """OAuth da Meta para conectar uma conta do Instagram."""
 
 import logging
+from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import httpx
@@ -12,7 +13,7 @@ from app import crud
 from app.core.config import settings
 from app.core.database import get_session
 from app.schemas.account import AccountRead
-from app.services import instagram_api
+from app.services import instagram_api, token_service
 
 logger = logging.getLogger("inboxpilot.instagram")
 router = APIRouter(prefix="/instagram", tags=["instagram"])
@@ -66,6 +67,17 @@ async def callback(code: str = "", db: AsyncSession = Depends(get_session)):
     if not (ig_user_id and access_token):
         return RedirectResponse(f"{settings.frontend_url}?connected=error")
 
+    # Troca o token curto (~1h) pelo de longa duração (~60 dias).
+    expires_at = None
+    try:
+        longlived = await instagram_api.exchange_for_long_lived(access_token)
+        access_token = longlived.get("access_token", access_token)
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            seconds=longlived.get("expires_in", 0)
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Falha ao trocar por token longo: %s", exc)
+
     # Busca o username pra exibição (best-effort).
     username = None
     try:
@@ -75,8 +87,20 @@ async def callback(code: str = "", db: AsyncSession = Depends(get_session)):
         logger.warning("Não consegui buscar o perfil: %s", exc)
 
     await crud.account.upsert(
-        db, ig_user_id=ig_user_id, access_token=access_token, username=username
+        db,
+        ig_user_id=ig_user_id,
+        access_token=access_token,
+        username=username,
+        token_expires_at=expires_at,
     )
+
+    # Inscreve o app nos webhooks da conta (comentários + mensagens).
+    try:
+        await instagram_api.subscribe_webhooks(ig_user_id, access_token)
+        logger.info("Webhooks inscritos para %s.", ig_user_id)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Falha ao inscrever webhooks: %s", exc)
+
     logger.info("Conta IG %s (%s) conectada.", ig_user_id, username)
     return RedirectResponse(f"{settings.frontend_url}?connected=ok")
 
@@ -94,6 +118,7 @@ async def list_account_media(
     account = await crud.account.get(db, account_id)
     if account is None:
         raise HTTPException(404, "Conta do Instagram não conectada")
+    account = await token_service.ensure_fresh(db, account)
     try:
         return await instagram_api.list_media(
             account.ig_user_id, account.access_token
