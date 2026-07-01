@@ -13,9 +13,10 @@ async def upsert(
     account_id: str,
     ig_user_id: str,
     username: str | None = None,
+    profile_pic: str | None = None,
     touch: bool = True,
 ) -> Contact:
-    """Cria o contato se não existir; opcionalmente atualiza last_message_at."""
+    """Cria o contato se não existir; atualiza username/foto/last_message_at."""
     result = await db.execute(
         select(Contact).where(
             Contact.account_id == account_id, Contact.ig_user_id == ig_user_id
@@ -25,8 +26,10 @@ async def upsert(
     if contact is None:
         contact = Contact(account_id=account_id, ig_user_id=ig_user_id, username=username)
         db.add(contact)
-    if username and not contact.username:
+    if username:
         contact.username = username
+    if profile_pic:
+        contact.profile_pic = profile_pic
     if touch:
         contact.last_message_at = datetime.now(timezone.utc)
     await db.commit()

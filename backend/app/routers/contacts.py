@@ -17,6 +17,7 @@ async def list_contacts(account_id: str, db: AsyncSession = Depends(get_session)
             "id": c.id,
             "ig_user_id": c.ig_user_id,
             "username": c.username,
+            "profile_pic": c.profile_pic,
             "first_seen": c.first_seen,
             "last_message_at": c.last_message_at,
         }

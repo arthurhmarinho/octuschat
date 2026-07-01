@@ -66,6 +66,7 @@ async def receive_event(request: Request, db: AsyncSession = Depends(get_session
                 text=value.get("text", ""),
                 post_id=(value.get("media") or {}).get("id"),
                 from_user=(value.get("from") or {}).get("id"),
+                from_username=(value.get("from") or {}).get("username"),
             )
 
         # Mensagens recebidas (DMs) → registra na conversa.

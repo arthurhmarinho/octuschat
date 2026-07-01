@@ -34,6 +34,7 @@ class AutomationCreate(AutomationBase):
 
 class AutomationUpdate(BaseModel):
     name: str | None = None
+    trigger: TriggerType | None = None
     keyword: str | None = None
     post_id: str | None = None
     reply_message: str | None = None

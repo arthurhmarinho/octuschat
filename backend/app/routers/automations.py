@@ -27,6 +27,16 @@ async def create_automation(
     return await crud.automation.create(db, data)
 
 
+@router.get("/{automation_id}", response_model=AutomationRead)
+async def get_automation(
+    automation_id: int, db: AsyncSession = Depends(get_session)
+):
+    automation = await crud.automation.get(db, automation_id)
+    if automation is None:
+        raise HTTPException(404, "Automação não encontrada")
+    return automation
+
+
 @router.patch("/{automation_id}", response_model=AutomationRead)
 async def update_automation(
     automation_id: int,

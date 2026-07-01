@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import { Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import Avatar from "@/components/Avatar";
 import { useAccount } from "@/lib/account";
 
 type Contact = {
   id: number;
   ig_user_id: string;
   username: string | null;
+  profile_pic: string | null;
   first_seen: string;
   last_message_at: string | null;
 };
@@ -70,10 +72,10 @@ export default function ContatosPage() {
               <tr key={c.id} className="border-b border-[var(--border)] last:border-0">
                 <td className="px-5 py-3">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 text-xs font-bold text-white">
-                      {(c.username || c.ig_user_id).charAt(0).toUpperCase()}
+                    <Avatar src={c.profile_pic} name={c.username || c.ig_user_id} size={34} />
+                    <span className="font-medium">
+                      {c.username ? `@${c.username}` : `usuário ${c.ig_user_id}`}
                     </span>
-                    <span className="font-medium">{c.username || `usuário ${c.ig_user_id}`}</span>
                   </div>
                 </td>
                 <td className="mono px-5 py-3 text-[var(--muted)]">{c.ig_user_id}</td>

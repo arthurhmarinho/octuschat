@@ -9,11 +9,35 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
+from app.models.account import InstagramAccount
+from app.models.contact import Contact
 from app.models.message_log import MessageLog
-from app.services import token_service
+from app.services import instagram_api, token_service
 from app.services.instagram_api import reply_privately_to_comment
 
 logger = logging.getLogger("inboxpilot.engine")
+
+
+async def _enrich_contact(
+    db: AsyncSession, account: InstagramAccount, contact: Contact
+) -> None:
+    """Preenche foto (e username, se faltar) do contato via API. Best-effort."""
+    if contact.profile_pic and contact.username:
+        return
+    try:
+        prof = await instagram_api.get_user_profile(
+            contact.ig_user_id, account.access_token
+        )
+        await crud.contact.upsert(
+            db,
+            account.ig_user_id,
+            contact.ig_user_id,
+            username=prof.get("username") or contact.username,
+            profile_pic=prof.get("profile_pic"),
+            touch=False,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.info("Sem perfil enriquecido p/ %s: %s", contact.ig_user_id, exc)
 
 
 def compose_message(
@@ -38,6 +62,7 @@ async def process_comment(
     text: str,
     post_id: str | None,
     from_user: str | None,
+    from_username: str | None = None,
 ) -> None:
     """Processa um comentário recebido via webhook."""
     # Idempotência: se já respondemos este comentário, ignora.
@@ -85,7 +110,10 @@ async def process_comment(
 
     # Registra contato + mensagem de saída (alimenta Conversas/Contatos).
     if log.status == "sent" and from_user:
-        contact = await crud.contact.upsert(db, account_id, from_user)
+        contact = await crud.contact.upsert(
+            db, account_id, from_user, username=from_username
+        )
+        await _enrich_contact(db, account, contact)
         await crud.message.create(
             db, account_id, contact.id, "out", body, "comment_reply"
         )
@@ -108,5 +136,6 @@ async def process_inbound_message(
     if sender_id in (account_id, account.ig_id):
         return
     contact = await crud.contact.upsert(db, account_id, sender_id)
+    await _enrich_contact(db, account, contact)
     await crud.message.create(db, account_id, contact.id, "in", text, "dm")
     logger.info("Mensagem recebida de %s registrada.", sender_id)

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import Avatar from "@/components/Avatar";
 import { useAccount } from "@/lib/account";
 
 type Message = {
@@ -12,8 +13,15 @@ type Message = {
   source: string;
   created_at: string;
 };
+type Contact = {
+  id: number;
+  ig_user_id: string;
+  username: string | null;
+  profile_pic: string | null;
+  last_message_at: string | null;
+};
 type Conversation = {
-  contact: { id: number; ig_user_id: string; username: string | null; last_message_at: string | null };
+  contact: Contact;
   messages: Message[];
 };
 
@@ -40,7 +48,7 @@ export default function ConversasPage() {
   }, [accountId, resolved]);
 
   const current = convos.find((c) => c.contact.id === selected);
-  const nameOf = (c: Conversation["contact"]) => c.username || `usuário ${c.ig_user_id}`;
+  const nameOf = (c: Contact) => (c.username ? `@${c.username}` : `usuário ${c.ig_user_id}`);
 
   if (!loading && convos.length === 0) {
     return (
@@ -66,9 +74,7 @@ export default function ConversasPage() {
                   active ? "bg-[var(--gold)]/10" : "hover:bg-white/5"
                 }`}
               >
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 text-xs font-bold text-white">
-                  {nameOf(c.contact).charAt(0).toUpperCase()}
-                </span>
+                <Avatar src={c.contact.profile_pic} name={nameOf(c.contact)} size={38} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium">{nameOf(c.contact)}</p>
                   <p className="truncate text-xs text-[var(--muted)]">
@@ -84,28 +90,42 @@ export default function ConversasPage() {
         <div className="flex flex-col">
           {current ? (
             <>
-              <div className="border-b border-[var(--border)] px-5 py-3">
-                <p className="font-semibold">{nameOf(current.contact)}</p>
-                <p className="mono text-xs text-[var(--muted)]">IGSID: {current.contact.ig_user_id}</p>
+              <div className="flex items-center gap-3 border-b border-[var(--border)] px-5 py-3">
+                <Avatar src={current.contact.profile_pic} name={nameOf(current.contact)} size={40} />
+                <div>
+                  <p className="font-semibold leading-tight">{nameOf(current.contact)}</p>
+                  <p className="mono text-xs text-[var(--muted)]">
+                    IGSID: {current.contact.ig_user_id}
+                  </p>
+                </div>
               </div>
-              <div className="flex-1 space-y-3 overflow-y-auto p-5">
-                {current.messages.map((m) => (
-                  <div key={m.id} className={`flex ${m.direction === "out" ? "justify-end" : "justify-start"}`}>
-                    <div
-                      className={`max-w-[70%] whitespace-pre-wrap rounded-2xl px-3.5 py-2 text-sm ${
-                        m.direction === "out"
-                          ? "rounded-br-sm bg-[var(--gold)]/20 text-[var(--fg)]"
-                          : "rounded-bl-sm bg-neutral-800"
-                      }`}
-                    >
-                      {m.text}
-                      <span className="mono mt-1 block text-[10px] text-[var(--muted)]">
-                        {m.direction === "out" ? "enviada" : "recebida"} ·{" "}
-                        {new Date(m.created_at).toLocaleString("pt-BR")}
-                      </span>
+              <div className="flex-1 space-y-4 overflow-y-auto p-5">
+                {current.messages.map((m) => {
+                  const out = m.direction === "out";
+                  return (
+                    <div key={m.id} className={`flex ${out ? "justify-end" : "justify-start"}`}>
+                      <div className="max-w-[72%]">
+                        <div
+                          className={`whitespace-pre-wrap break-words px-4 py-2.5 text-sm shadow-sm ${
+                            out
+                              ? "rounded-2xl rounded-br-md bg-[var(--gold)] text-[#2a1e05]"
+                              : "rounded-2xl rounded-bl-md border border-[var(--border)] bg-neutral-800 text-[var(--fg)]"
+                          }`}
+                        >
+                          {m.text}
+                        </div>
+                        <span
+                          className={`mono mt-1 block text-[10px] text-[var(--muted)] ${
+                            out ? "text-right" : "text-left"
+                          }`}
+                        >
+                          {out ? "enviada" : "recebida"} ·{" "}
+                          {new Date(m.created_at).toLocaleString("pt-BR")}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           ) : (

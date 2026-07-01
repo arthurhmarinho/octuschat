@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Workflow, KeyRound, MessageSquareReply } from "lucide-react";
+import { Plus, Workflow, KeyRound, MessageSquareReply, Pencil, Trash2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { useAccount } from "@/lib/account";
 
@@ -21,6 +21,7 @@ export default function AutomationsPage() {
   const { accountId, resolved } = useAccount();
   const [items, setItems] = useState<Automation[]>([]);
   const [state, setState] = useState<LoadState>("loading");
+  const [busy, setBusy] = useState<number | null>(null);
 
   useEffect(() => {
     if (!resolved) return;
@@ -37,6 +38,36 @@ export default function AutomationsPage() {
       .catch(() => setState("error"));
   }, [accountId, resolved]);
 
+  async function toggleEnabled(a: Automation) {
+    setBusy(a.id);
+    try {
+      const res = await fetch(`/api/backend/automations/${a.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !a.enabled }),
+      });
+      if (res.ok) {
+        setItems((prev) =>
+          prev.map((x) => (x.id === a.id ? { ...x, enabled: !x.enabled } : x))
+        );
+      }
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove(a: Automation) {
+    if (!confirm(`Excluir a automação "${a.name || "Sem nome"}"? Isso não pode ser desfeito.`))
+      return;
+    setBusy(a.id);
+    try {
+      const res = await fetch(`/api/backend/automations/${a.id}`, { method: "DELETE" });
+      if (res.ok) setItems((prev) => prev.filter((x) => x.id !== a.id));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   const newButton = (
     <Link href="/automations/new" className="btn-gold inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm">
       <Plus size={16} /> Nova automação
@@ -48,7 +79,10 @@ export default function AutomationsPage() {
       {state === "ready" && items.length > 0 ? (
         <div className="glass divide-y divide-[var(--border)] overflow-hidden">
           {items.map((a) => (
-            <div key={a.id} className="flex items-center gap-4 px-5 py-4">
+            <div
+              key={a.id}
+              className={`flex items-center gap-4 px-5 py-4 ${busy === a.id ? "opacity-50" : ""}`}
+            >
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--gold)]/10 text-[var(--gold)]">
                 {a.trigger === "comment_keyword" ? <KeyRound size={16} /> : <MessageSquareReply size={16} />}
               </span>
@@ -60,15 +94,45 @@ export default function AutomationsPage() {
                     : "qualquer comentário"}
                 </p>
               </div>
-              <span
-                className={`mono rounded border px-2 py-0.5 text-[10px] ${
-                  a.enabled
-                    ? "border-[var(--green)]/40 bg-[var(--green)]/10 text-[var(--green)]"
-                    : "border-[var(--border)] bg-white/5 text-[var(--muted)]"
+
+              {/* Toggle ativar/desativar */}
+              <button
+                type="button"
+                onClick={() => toggleEnabled(a)}
+                disabled={busy === a.id}
+                title={a.enabled ? "Desativar" : "Ativar"}
+                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+                  a.enabled ? "bg-[var(--green)]" : "bg-white/15"
                 }`}
               >
-                {a.enabled ? "● ativa" : "pausada"}
+                <span
+                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
+                    a.enabled ? "left-[18px]" : "left-0.5"
+                  }`}
+                />
+              </button>
+
+              <span className="mono w-14 text-center text-[10px] text-[var(--muted)]">
+                {a.enabled ? "ativa" : "pausada"}
               </span>
+
+              {/* Ações */}
+              <Link
+                href={`/automations/${a.id}/edit`}
+                title="Editar"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-white/5 hover:text-white"
+              >
+                <Pencil size={15} />
+              </Link>
+              <button
+                type="button"
+                onClick={() => remove(a)}
+                disabled={busy === a.id}
+                title="Excluir"
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-red-500/10 hover:text-red-400"
+              >
+                <Trash2 size={15} />
+              </button>
             </div>
           ))}
         </div>

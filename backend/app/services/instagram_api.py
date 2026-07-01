@@ -46,6 +46,19 @@ async def subscribe_webhooks(ig_user_id: str, access_token: str) -> dict:
         return resp.json()
 
 
+async def get_user_profile(igsid: str, access_token: str) -> dict:
+    """Perfil de um usuário que interagiu (username, nome, foto). Best-effort.
+
+    Funciona para usuários dentro do contexto de mensagens da conta.
+    """
+    url = f"{GRAPH_BASE}/{settings.graph_api_version}/{igsid}"
+    params = {"fields": "name,username,profile_pic", "access_token": access_token}
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url, params=params)
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def get_subscribed_apps(ig_user_id: str, access_token: str) -> dict:
     """Consulta os campos de webhook aos quais a conta está inscrita."""
     url = f"{GRAPH_BASE}/{settings.graph_api_version}/{ig_user_id}/subscribed_apps"

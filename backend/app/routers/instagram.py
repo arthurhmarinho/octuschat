@@ -84,7 +84,8 @@ async def callback(code: str = "", db: AsyncSession = Depends(get_session)):
     try:
         profile = await instagram_api.get_profile(ig_user_id, access_token)
         username = profile.get("username")
-        ig_id = profile.get("id")
+        # No /me, é o campo `user_id` que corresponde ao entry.id do webhook.
+        ig_id = profile.get("user_id")
     except Exception as exc:  # noqa: BLE001
         logger.warning("Não consegui buscar o perfil: %s", exc)
 
@@ -134,8 +135,10 @@ async def account_subscription(
             account.ig_user_id, account.access_token
         )
         result["profile"] = profile
-        if profile.get("id") and profile.get("id") != account.ig_id:
-            account.ig_id = profile.get("id")
+        # `user_id` do /me = entry.id do webhook (difere do `id`/ig_user_id).
+        webhook_id = profile.get("user_id")
+        if webhook_id and webhook_id != account.ig_id:
+            account.ig_id = webhook_id
             await db.commit()
             result["ig_id_updated"] = account.ig_id
     except Exception as exc:  # noqa: BLE001
