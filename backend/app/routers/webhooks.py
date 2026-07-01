@@ -6,6 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core import webhook_debug
 from app.core.config import settings
 from app.core.database import get_session
 from app.core.security import verify_meta_signature
@@ -32,15 +33,20 @@ async def receive_event(request: Request, db: AsyncSession = Depends(get_session
     """Recebe notificações de eventos e dispara automações."""
     raw = await request.body()
 
-    # Segurança: valida a assinatura da Meta. Se o App Secret ainda não foi
-    # configurado (dev), apenas avisa — em produção a verificação é obrigatória.
+    # Diagnóstico: registra TODA requisição (antes de qualquer checagem).
     signature = request.headers.get("X-Hub-Signature-256")
-    if settings.meta_app_secret:
-        if not verify_meta_signature(raw, signature, settings.meta_app_secret):
+    sig_valid = (
+        verify_meta_signature(raw, signature, settings.meta_app_secret)
+        if settings.meta_app_secret
+        else None
+    )
+    webhook_debug.record(bool(signature), sig_valid, raw)
+
+    # Segurança: valida a assinatura da Meta (pode ser desligada via flag p/ debug).
+    if settings.meta_app_secret and settings.webhook_enforce_signature:
+        if not sig_valid:
             logger.warning("Assinatura do webhook inválida — rejeitado.")
             return Response(status_code=status.HTTP_403_FORBIDDEN)
-    else:
-        logger.warning("META_APP_SECRET vazio — pulando verificação (apenas dev).")
 
     body = json.loads(raw)
     logger.info("Webhook recebido: %s", body)
@@ -76,3 +82,24 @@ async def receive_event(request: Request, db: AsyncSession = Depends(get_session
 
     # A Meta espera 200 rápido.
     return {"status": "ok"}
+
+
+@router.get("/debug")
+async def webhook_debug_view(db: AsyncSession = Depends(get_session)):
+    """Diagnóstico: últimos webhooks recebidos + últimos envios registrados."""
+    from app import crud
+
+    logs = await crud.message_log.recent(db)
+    return {
+        "enforce_signature": settings.webhook_enforce_signature,
+        "hits": webhook_debug.recent(),
+        "message_logs": [
+            {
+                "comment_id": m.comment_id,
+                "status": m.status,
+                "error": m.error,
+                "created_at": m.created_at,
+            }
+            for m in logs
+        ],
+    }

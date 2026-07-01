@@ -110,6 +110,35 @@ async def list_accounts(db: AsyncSession = Depends(get_session)):
     return await crud.account.list_all(db)
 
 
+@router.get("/{account_id}/subscription")
+async def account_subscription(
+    account_id: str, db: AsyncSession = Depends(get_session)
+):
+    """Diagnóstico: campos de webhook aos quais a conta está inscrita.
+
+    Também tenta (re)inscrever, retornando o resultado — útil se a inscrição
+    do OAuth falhou silenciosamente.
+    """
+    account = await crud.account.get(db, account_id)
+    if account is None:
+        raise HTTPException(404, "Conta do Instagram não conectada")
+    account = await token_service.ensure_fresh(db, account)
+    result: dict = {}
+    try:
+        result["subscribe_now"] = await instagram_api.subscribe_webhooks(
+            account.ig_user_id, account.access_token
+        )
+    except Exception as exc:  # noqa: BLE001
+        result["subscribe_error"] = str(exc)
+    try:
+        result["current"] = await instagram_api.get_subscribed_apps(
+            account.ig_user_id, account.access_token
+        )
+    except Exception as exc:  # noqa: BLE001
+        result["get_error"] = str(exc)
+    return result
+
+
 @router.get("/{account_id}/media")
 async def list_account_media(
     account_id: str, db: AsyncSession = Depends(get_session)

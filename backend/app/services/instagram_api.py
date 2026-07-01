@@ -46,6 +46,15 @@ async def subscribe_webhooks(ig_user_id: str, access_token: str) -> dict:
         return resp.json()
 
 
+async def get_subscribed_apps(ig_user_id: str, access_token: str) -> dict:
+    """Consulta os campos de webhook aos quais a conta está inscrita."""
+    url = f"{GRAPH_BASE}/{settings.graph_api_version}/{ig_user_id}/subscribed_apps"
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(url, params={"access_token": access_token})
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def reply_privately_to_comment(
     ig_user_id: str, comment_id: str, text: str, access_token: str
 ) -> dict:
