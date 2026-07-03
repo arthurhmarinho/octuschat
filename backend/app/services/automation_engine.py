@@ -85,7 +85,12 @@ async def process_comment(
 
     # Dispara a primeira automação que casou (1 resposta privada por comentário).
     auto = matches[0]
-    body = compose_message(auto.reply_message, auto.link_url, auto.link_label)
+    buttons = auto.buttons or None
+    # Com botões, o texto é a mensagem crua (o link vira botão); sem botões,
+    # embutimos o link no texto (compat com automações antigas).
+    body = auto.reply_message if buttons else compose_message(
+        auto.reply_message, auto.link_url, auto.link_label
+    )
     log = MessageLog(
         automation_id=auto.id,
         comment_id=comment_id,
@@ -93,17 +98,35 @@ async def process_comment(
         status="sent",
     )
     try:
+        # Tenta a private reply já com os botões (1 mensagem).
         await reply_privately_to_comment(
             ig_user_id=account.ig_user_id,
             comment_id=comment_id,
             text=body,
             access_token=account.access_token,
+            buttons=buttons,
         )
         logger.info("Automação '%s' disparada para %s.", auto.name, from_user)
     except Exception as exc:  # noqa: BLE001
-        log.status = "failed"
-        log.error = str(exc)
-        logger.exception("Falha ao enviar resposta privada: %s", exc)
+        # Fallback: se o template foi recusado na private reply, garante o texto
+        # e manda os botões como mensagem regular (a janela de 24h está aberta).
+        logger.warning("Private reply com botões falhou (%s); tentando fallback.", exc)
+        try:
+            await reply_privately_to_comment(
+                ig_user_id=account.ig_user_id,
+                comment_id=comment_id,
+                text=body,
+                access_token=account.access_token,
+            )
+            if buttons and from_user:
+                await instagram_api.send_message_to_user(
+                    account.ig_user_id, from_user, body, account.access_token, buttons
+                )
+            logger.info("Fallback OK para '%s'.", auto.name)
+        except Exception as exc2:  # noqa: BLE001
+            log.status = "failed"
+            log.error = str(exc2)
+            logger.exception("Falha ao enviar (mesmo no fallback): %s", exc2)
 
     # Resposta PÚBLICA opcional no comentário (best-effort, não bloqueia a DM).
     if auto.public_reply:
@@ -124,8 +147,11 @@ async def process_comment(
             db, account_id, from_user, username=from_username
         )
         await _enrich_contact(db, account, contact)
+        stored = body
+        if buttons:
+            stored += "\n\n" + "\n".join(f"[{b['label']}] → {b['url']}" for b in buttons)
         await crud.message.create(
-            db, account_id, contact.id, "out", body, "comment_reply"
+            db, account_id, contact.id, "out", stored, "comment_reply"
         )
 
 

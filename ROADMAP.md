@@ -68,8 +68,9 @@ ANALYTICS · GROWTH TOOLS (ref links/QR/widgets) · INTEGRAÇÕES · IA
 |---|---|---|
 | Texto | 🟢 | — |
 | Texto + link embutido | 🟢 | nosso texto+link atual |
-| **Botões (até 3 por texto: URL/continuar flow)** | ❌ | payload `button` template |
-| **Quick Replies (até 12)** | ❌ | payload `quick_replies` |
+| **Botões de link (até 3, web_url)** | 🟢 | `buttons` → button template (fallback p/ private reply) |
+| Botões postback (continuar flow) | ⬜ | depende do engine (Fase 3) |
+| **Quick Replies (até 12)** | ❌ | payload `quick_replies` (Fase 3) |
 | Imagem / Áudio / Vídeo / Arquivo | ❌ | attachment payloads |
 | Card (imagem + botões) / Galeria (até 10) | ❌ | `generic` template |
 | Coleta de dados (pergunta → salva em campo) | ❌ | engine + campos custom |
@@ -138,7 +139,8 @@ ANALYTICS · GROWTH TOOLS (ref links/QR/widgets) · INTEGRAÇÕES · IA
 O combo mais usado do ManyChat: comentário → **resposta pública** + DM com **botão** → clique abre janela 24h → follow-up com link.
 - [x] Resposta pública automática ao comentário (`public_reply`)
 - [x] Exclusão de palavras-chave (`exclude_keywords`)
-- [ ] Botões e Quick Replies na DM  ← próxima fatia (exige teste ao vivo)
+- [x] Botões de link na DM (até 3, button template + fallback) ← falta confirmar ao vivo
+- [ ] Quick Replies (chips) — junto do engine de flow (Fase 3)
 - [ ] Opção "próxima publicação" (rastrear última mídia)
 - [ ] Fila/retry de envio (worker simples)
 

@@ -2,11 +2,13 @@
 
 import { Instagram } from "lucide-react";
 
+type Button = { label: string; url: string };
 type Props = {
   username: string;
   text: string;
   linkUrl?: string;
   linkLabel?: string;
+  buttons?: Button[];
 };
 
 /**
@@ -14,7 +16,8 @@ type Props = {
  * Mostra o texto como balão recebido e, se houver link, um "card" clicável
  * imitando o preview de link do Instagram.
  */
-export default function DmPreview({ username, text, linkUrl, linkLabel }: Props) {
+export default function DmPreview({ username, text, linkUrl, linkLabel, buttons }: Props) {
+  const validButtons = (buttons ?? []).filter((b) => b.label.trim() || b.url.trim());
   return (
     <div className="mx-auto w-full max-w-[320px] rounded-[2rem] border border-neutral-700 bg-black p-3 shadow-xl">
       {/* Header da conversa */}
@@ -42,23 +45,39 @@ export default function DmPreview({ username, text, linkUrl, linkLabel }: Props)
           </div>
         )}
 
-        {linkUrl && (
-          <a
-            href={linkUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="block max-w-[80%] overflow-hidden rounded-2xl border border-neutral-700 bg-neutral-900"
-          >
-            <div className="flex h-20 items-center justify-center bg-neutral-800 text-neutral-500">
-              🔗
-            </div>
-            <div className="px-3 py-2">
-              <p className="truncate text-sm font-medium text-blue-400">
-                {linkLabel || "Abrir link"}
-              </p>
-              <p className="truncate text-xs text-neutral-500">{linkUrl}</p>
-            </div>
-          </a>
+        {/* Botões (button template): empilhados abaixo da mensagem */}
+        {validButtons.length > 0 ? (
+          <div className="max-w-[80%] overflow-hidden rounded-2xl border border-neutral-700 bg-neutral-900">
+            {validButtons.slice(0, 3).map((b, i) => (
+              <div
+                key={i}
+                className={`px-3 py-2.5 text-center text-sm font-medium text-blue-400 ${
+                  i > 0 ? "border-t border-neutral-700" : ""
+                }`}
+              >
+                {b.label.trim() || "Botão"}
+              </div>
+            ))}
+          </div>
+        ) : (
+          linkUrl && (
+            <a
+              href={linkUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="block max-w-[80%] overflow-hidden rounded-2xl border border-neutral-700 bg-neutral-900"
+            >
+              <div className="flex h-20 items-center justify-center bg-neutral-800 text-neutral-500">
+                🔗
+              </div>
+              <div className="px-3 py-2">
+                <p className="truncate text-sm font-medium text-blue-400">
+                  {linkLabel || "Abrir link"}
+                </p>
+                <p className="truncate text-xs text-neutral-500">{linkUrl}</p>
+              </div>
+            </a>
+          )
         )}
       </div>
     </div>

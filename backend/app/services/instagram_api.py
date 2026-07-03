@@ -81,8 +81,31 @@ async def reply_publicly_to_comment(
         return resp.json()
 
 
+def build_message(text: str, buttons: list[dict] | None = None) -> dict:
+    """Monta o objeto `message`: texto puro ou button template (até 3 web_url)."""
+    if buttons:
+        return {
+            "attachment": {
+                "type": "template",
+                "payload": {
+                    "template_type": "button",
+                    "text": text[:640],
+                    "buttons": [
+                        {"type": "web_url", "url": b["url"], "title": b["label"][:20]}
+                        for b in buttons[:3]
+                    ],
+                },
+            }
+        }
+    return {"text": text}
+
+
 async def reply_privately_to_comment(
-    ig_user_id: str, comment_id: str, text: str, access_token: str
+    ig_user_id: str,
+    comment_id: str,
+    text: str,
+    access_token: str,
+    buttons: list[dict] | None = None,
 ) -> dict:
     """Resposta privada (private reply) a um comentário → vira DM.
 
@@ -92,7 +115,28 @@ async def reply_privately_to_comment(
     url = f"{GRAPH_BASE}/{settings.graph_api_version}/{ig_user_id}/messages"
     payload = {
         "recipient": {"comment_id": comment_id},
-        "message": {"text": text},
+        "message": build_message(text, buttons),
+    }
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            url, params={"access_token": access_token}, json=payload
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
+async def send_message_to_user(
+    ig_user_id: str,
+    recipient_id: str,
+    text: str,
+    access_token: str,
+    buttons: list[dict] | None = None,
+) -> dict:
+    """Envia mensagem regular ao usuário (dentro da janela de 24h)."""
+    url = f"{GRAPH_BASE}/{settings.graph_api_version}/{ig_user_id}/messages"
+    payload = {
+        "recipient": {"id": recipient_id},
+        "message": build_message(text, buttons),
     }
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(

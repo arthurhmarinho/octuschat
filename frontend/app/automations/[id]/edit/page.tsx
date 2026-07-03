@@ -16,6 +16,12 @@ export default function EditAutomationPage() {
     fetch(`/api/backend/automations/${id}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((a) => {
+        const buttons =
+          Array.isArray(a.buttons) && a.buttons.length
+            ? a.buttons
+            : a.link_url
+            ? [{ label: a.link_label || "Abrir", url: a.link_url }]
+            : [];
         setInitial({
           name: a.name ?? "",
           trigger: a.trigger,
@@ -25,8 +31,7 @@ export default function EditAutomationPage() {
           scope: a.post_id ? "specific" : "all",
           replyMessage: a.reply_message ?? "",
           publicReply: a.public_reply ?? "",
-          linkUrl: a.link_url ?? "",
-          linkLabel: a.link_label ?? "",
+          buttons,
         });
       })
       .catch(() => setError(true));

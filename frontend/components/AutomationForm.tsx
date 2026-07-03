@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Images, Image as ImageIcon } from "lucide-react";
+import { ArrowLeft, Loader2, Images, Image as ImageIcon, Plus, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import DmPreview from "@/components/DmPreview";
 import PostPicker from "@/components/PostPicker";
@@ -11,6 +11,7 @@ import { useAccount } from "@/lib/account";
 
 type Trigger = "comment_any" | "comment_keyword";
 type Scope = "all" | "specific";
+type Button = { label: string; url: string };
 type SaveState = { kind: "idle" | "saving" | "ok" | "error"; msg?: string };
 
 export type AutomationInitial = {
@@ -22,8 +23,7 @@ export type AutomationInitial = {
   scope: Scope;
   replyMessage: string;
   publicReply: string;
-  linkUrl: string;
-  linkLabel: string;
+  buttons: Button[];
 };
 
 const EMPTY: AutomationInitial = {
@@ -35,8 +35,7 @@ const EMPTY: AutomationInitial = {
   scope: "all",
   replyMessage: "",
   publicReply: "",
-  linkUrl: "",
-  linkLabel: "",
+  buttons: [],
 };
 
 export default function AutomationForm({
@@ -59,13 +58,26 @@ export default function AutomationForm({
   const [postId, setPostId] = useState(start.postId);
   const [replyMessage, setReplyMessage] = useState(start.replyMessage);
   const [publicReply, setPublicReply] = useState(start.publicReply);
-  const [linkUrl, setLinkUrl] = useState(start.linkUrl);
-  const [linkLabel, setLinkLabel] = useState(start.linkLabel);
+  const [buttons, setButtons] = useState<Button[]>(start.buttons);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
+
+  const addButton = () =>
+    setButtons((b) => (b.length >= 3 ? b : [...b, { label: "", url: "" }]));
+  const removeButton = (i: number) =>
+    setButtons((b) => b.filter((_, idx) => idx !== i));
+  const updateButton = (i: number, field: keyof Button, value: string) =>
+    setButtons((b) => b.map((x, idx) => (idx === i ? { ...x, [field]: value } : x)));
 
   async function handleSave() {
     if (!isEdit && !accountId) {
       setSave({ kind: "error", msg: "Nenhuma conta do Instagram conectada." });
+      return;
+    }
+    const cleanButtons = buttons
+      .map((b) => ({ label: b.label.trim(), url: b.url.trim() }))
+      .filter((b) => b.label && b.url);
+    if (cleanButtons.some((b) => !/^https?:\/\//i.test(b.url))) {
+      setSave({ kind: "error", msg: "A URL do botão precisa começar com http:// ou https://" });
       return;
     }
     setSave({ kind: "saving" });
@@ -77,8 +89,9 @@ export default function AutomationForm({
       post_id: scope === "specific" ? postId || null : null,
       reply_message: replyMessage,
       public_reply: publicReply || null,
-      link_url: linkUrl || null,
-      link_label: linkLabel || null,
+      buttons: cleanButtons.length ? cleanButtons : null,
+      link_url: null,
+      link_label: null,
     };
     if (!isEdit) payload.account_id = accountId;
 
@@ -231,25 +244,43 @@ export default function AutomationForm({
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className={labelCls}>Link (URL)</label>
-                <input
-                  className={inputCls}
-                  value={linkUrl}
-                  onChange={(e) => setLinkUrl(e.target.value)}
-                  placeholder="https://..."
-                />
+            <div>
+              <label className={labelCls}>Botões de link (até 3)</label>
+              <div className="space-y-2">
+                {buttons.map((b, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      className={inputCls}
+                      value={b.label}
+                      onChange={(e) => updateButton(i, "label", e.target.value)}
+                      placeholder="Rótulo (ex.: Acessar oferta)"
+                    />
+                    <input
+                      className={inputCls}
+                      value={b.url}
+                      onChange={(e) => updateButton(i, "url", e.target.value)}
+                      placeholder="https://..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeButton(i)}
+                      title="Remover"
+                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-red-500/10 hover:text-red-400"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                ))}
               </div>
-              <div>
-                <label className={labelCls}>Rótulo do link</label>
-                <input
-                  className={inputCls}
-                  value={linkLabel}
-                  onChange={(e) => setLinkLabel(e.target.value)}
-                  placeholder="Ex.: Acessar oferta"
-                />
-              </div>
+              {buttons.length < 3 && (
+                <button
+                  type="button"
+                  onClick={addButton}
+                  className="mt-2 inline-flex items-center gap-1.5 text-sm text-[var(--gold)] hover:underline"
+                >
+                  <Plus size={14} /> Adicionar botão
+                </button>
+              )}
             </div>
 
             <button
@@ -282,8 +313,7 @@ export default function AutomationForm({
             <DmPreview
               username="sua_conta"
               text={replyMessage}
-              linkUrl={linkUrl || undefined}
-              linkLabel={linkLabel || undefined}
+              buttons={buttons}
             />
           </div>
         </div>

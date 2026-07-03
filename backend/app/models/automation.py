@@ -3,7 +3,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -36,9 +36,11 @@ class Automation(Base):
     reply_message: Mapped[str] = mapped_column(Text, nullable=False)
     # resposta PÚBLICA opcional no próprio comentário (ex.: "Enviei no seu direct 🚀")
     public_reply: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    # Link opcional anexado à DM (estilo ManyChat: texto + botão com URL).
+    # Link opcional anexado à DM (compat; substituído por buttons).
     link_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     link_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Botões de link na DM (até 3): lista de {"label": str, "url": str}.
+    buttons: Mapped[list | None] = mapped_column(JSON, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
