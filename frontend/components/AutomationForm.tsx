@@ -17,9 +17,11 @@ export type AutomationInitial = {
   name: string;
   trigger: Trigger;
   keyword: string;
+  excludeKeywords: string;
   postId: string;
   scope: Scope;
   replyMessage: string;
+  publicReply: string;
   linkUrl: string;
   linkLabel: string;
 };
@@ -28,9 +30,11 @@ const EMPTY: AutomationInitial = {
   name: "",
   trigger: "comment_keyword",
   keyword: "",
+  excludeKeywords: "",
   postId: "",
   scope: "all",
   replyMessage: "",
+  publicReply: "",
   linkUrl: "",
   linkLabel: "",
 };
@@ -50,9 +54,11 @@ export default function AutomationForm({
   const [name, setName] = useState(start.name);
   const [trigger, setTrigger] = useState<Trigger>(start.trigger);
   const [keyword, setKeyword] = useState(start.keyword);
+  const [excludeKeywords, setExcludeKeywords] = useState(start.excludeKeywords);
   const [scope, setScope] = useState<Scope>(start.scope);
   const [postId, setPostId] = useState(start.postId);
   const [replyMessage, setReplyMessage] = useState(start.replyMessage);
+  const [publicReply, setPublicReply] = useState(start.publicReply);
   const [linkUrl, setLinkUrl] = useState(start.linkUrl);
   const [linkLabel, setLinkLabel] = useState(start.linkLabel);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
@@ -67,8 +73,10 @@ export default function AutomationForm({
       name,
       trigger,
       keyword: trigger === "comment_keyword" ? keyword : null,
+      exclude_keywords: excludeKeywords || null,
       post_id: scope === "specific" ? postId || null : null,
       reply_message: replyMessage,
+      public_reply: publicReply || null,
       link_url: linkUrl || null,
       link_label: linkLabel || null,
     };
@@ -152,6 +160,19 @@ export default function AutomationForm({
             )}
 
             <div>
+              <label className={labelCls}>Palavras a excluir (opcional)</label>
+              <input
+                className={inputCls}
+                value={excludeKeywords}
+                onChange={(e) => setExcludeKeywords(e.target.value)}
+                placeholder="Ex.: não, spam, ódio (separadas por vírgula)"
+              />
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Se o comentário contiver alguma dessas palavras, a automação não dispara.
+              </p>
+            </div>
+
+            <div>
               <label className={labelCls}>Aplicar em</label>
               <div className="grid grid-cols-2 gap-3">
                 {(
@@ -188,13 +209,26 @@ export default function AutomationForm({
             </div>
 
             <div>
-              <label className={labelCls}>Mensagem (texto)</label>
+              <label className={labelCls}>Mensagem (texto) — vai na DM</label>
               <textarea
                 className={`${inputCls} min-h-[110px] resize-y`}
                 value={replyMessage}
                 onChange={(e) => setReplyMessage(e.target.value)}
                 placeholder="Oi! Obrigado pelo comentário 💜"
               />
+            </div>
+
+            <div>
+              <label className={labelCls}>Resposta pública no comentário (opcional)</label>
+              <input
+                className={inputCls}
+                value={publicReply}
+                onChange={(e) => setPublicReply(e.target.value)}
+                placeholder="Ex.: Enviei no seu direct 🚀"
+              />
+              <p className="mt-1 text-xs text-[var(--muted)]">
+                Aparece como resposta pública no post — dá prova social e incentiva mais comentários.
+              </p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">

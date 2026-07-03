@@ -105,6 +105,16 @@ async def process_comment(
         log.error = str(exc)
         logger.exception("Falha ao enviar resposta privada: %s", exc)
 
+    # Resposta PÚBLICA opcional no comentário (best-effort, não bloqueia a DM).
+    if auto.public_reply:
+        try:
+            await instagram_api.reply_publicly_to_comment(
+                comment_id, auto.public_reply, account.access_token
+            )
+            logger.info("Resposta pública enviada no comentário %s.", comment_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Falha na resposta pública: %s", exc)
+
     db.add(log)
     await db.commit()
 

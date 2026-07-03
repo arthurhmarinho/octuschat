@@ -58,6 +58,11 @@ async def find_matching(
     for auto in candidates:
         if auto.post_id and auto.post_id != post_id:
             continue
+        # Palavras de exclusão: se qualquer uma aparecer, ignora o disparo.
+        if auto.exclude_keywords:
+            blocked = [w.strip().lower() for w in auto.exclude_keywords.split(",") if w.strip()]
+            if any(w in lowered for w in blocked):
+                continue
         if auto.trigger == TriggerType.COMMENT_ANY:
             matches.append(auto)
         elif auto.trigger == TriggerType.COMMENT_KEYWORD and auto.keyword:

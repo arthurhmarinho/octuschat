@@ -29,9 +29,13 @@ class Automation(Base):
     )
     # usado quando trigger == COMMENT_KEYWORD
     keyword: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # palavras que, se presentes no comentário, IMPEDEM o disparo (separadas por vírgula)
+    exclude_keywords: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # None = aplica a todos os posts da conta
     post_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     reply_message: Mapped[str] = mapped_column(Text, nullable=False)
+    # resposta PÚBLICA opcional no próprio comentário (ex.: "Enviei no seu direct 🚀")
+    public_reply: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     # Link opcional anexado à DM (estilo ManyChat: texto + botão com URL).
     link_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     link_label: Mapped[str | None] = mapped_column(String(255), nullable=True)

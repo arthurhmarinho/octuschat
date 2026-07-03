@@ -68,6 +68,19 @@ async def get_subscribed_apps(ig_user_id: str, access_token: str) -> dict:
         return resp.json()
 
 
+async def reply_publicly_to_comment(
+    comment_id: str, message: str, access_token: str
+) -> dict:
+    """Responde PUBLICAMENTE ao comentário (aparece como reply no post)."""
+    url = f"{GRAPH_BASE}/{settings.graph_api_version}/{comment_id}/replies"
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            url, params={"message": message, "access_token": access_token}
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+
 async def reply_privately_to_comment(
     ig_user_id: str, comment_id: str, text: str, access_token: str
 ) -> dict:

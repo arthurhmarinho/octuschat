@@ -11,8 +11,10 @@ class AutomationBase(BaseModel):
     name: str
     trigger: TriggerType
     keyword: str | None = None
+    exclude_keywords: str | None = None
     post_id: str | None = None
     reply_message: str
+    public_reply: str | None = None
     link_url: str | None = None
     link_label: str | None = None
     enabled: bool = True
@@ -36,8 +38,10 @@ class AutomationUpdate(BaseModel):
     name: str | None = None
     trigger: TriggerType | None = None
     keyword: str | None = None
+    exclude_keywords: str | None = None
     post_id: str | None = None
     reply_message: str | None = None
+    public_reply: str | None = None
     link_url: str | None = None
     link_label: str | None = None
     enabled: bool | None = None

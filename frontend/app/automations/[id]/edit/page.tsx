@@ -20,9 +20,11 @@ export default function EditAutomationPage() {
           name: a.name ?? "",
           trigger: a.trigger,
           keyword: a.keyword ?? "",
+          excludeKeywords: a.exclude_keywords ?? "",
           postId: a.post_id ?? "",
           scope: a.post_id ? "specific" : "all",
           replyMessage: a.reply_message ?? "",
+          publicReply: a.public_reply ?? "",
           linkUrl: a.link_url ?? "",
           linkLabel: a.link_label ?? "",
         });
