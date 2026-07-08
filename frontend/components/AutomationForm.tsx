@@ -3,14 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Images, Image as ImageIcon, Plus, X } from "lucide-react";
+import { ArrowLeft, Loader2, Images, Image as ImageIcon, Sparkles, Plus, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import DmPreview from "@/components/DmPreview";
 import PostPicker from "@/components/PostPicker";
 import { useAccount } from "@/lib/account";
 
 type Trigger = "comment_any" | "comment_keyword";
-type Scope = "all" | "specific";
+type Scope = "all" | "specific" | "next";
 type Button = { label: string; url: string };
 type SaveState = { kind: "idle" | "saving" | "ok" | "error"; msg?: string };
 
@@ -87,6 +87,7 @@ export default function AutomationForm({
       keyword: trigger === "comment_keyword" ? keyword : null,
       exclude_keywords: excludeKeywords || null,
       post_id: scope === "specific" ? postId || null : null,
+      bind_next: scope === "next",
       reply_message: replyMessage,
       public_reply: publicReply || null,
       buttons: cleanButtons.length ? cleanButtons : null,
@@ -187,11 +188,12 @@ export default function AutomationForm({
 
             <div>
               <label className={labelCls}>Aplicar em</label>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 {(
                   [
-                    { v: "all", Icon: Images, t: "Todas as publicações", d: "Vale para qualquer post ou Reel." },
-                    { v: "specific", Icon: ImageIcon, t: "Publicação específica", d: "Escolha um post ou Reel." },
+                    { v: "all", Icon: Images, t: "Todas", d: "Qualquer post ou Reel." },
+                    { v: "specific", Icon: ImageIcon, t: "Específica", d: "Escolha um post." },
+                    { v: "next", Icon: Sparkles, t: "Próxima", d: "O próximo que você postar." },
                   ] as const
                 ).map(({ v, Icon, t, d }) => {
                   const active = scope === v;
@@ -218,6 +220,14 @@ export default function AutomationForm({
                 <div className="mt-3">
                   <PostPicker accountId={accountId} value={postId} onChange={setPostId} />
                 </div>
+              )}
+
+              {scope === "next" && (
+                <p className="mt-2 rounded-lg border border-dashed border-[var(--border)] p-3 text-xs text-[var(--muted)]">
+                  A automação vai se ativar no <strong>próximo post ou Reel</strong> que você
+                  publicar — assim que ele receber o primeiro comentário. Ideal para criar a
+                  regra antes de postar.
+                </p>
               )}
             </div>
 

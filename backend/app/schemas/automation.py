@@ -18,6 +18,7 @@ class AutomationBase(BaseModel):
     keyword: str | None = None
     exclude_keywords: str | None = None
     post_id: str | None = None
+    bind_next: bool = False
     reply_message: str
     public_reply: str | None = None
     link_url: str | None = None
@@ -54,6 +55,7 @@ class AutomationUpdate(BaseModel):
     keyword: str | None = None
     exclude_keywords: str | None = None
     post_id: str | None = None
+    bind_next: bool | None = None
     reply_message: str | None = None
     public_reply: str | None = None
     link_url: str | None = None

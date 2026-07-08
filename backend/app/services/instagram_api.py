@@ -1,12 +1,40 @@
 """Cliente fino da Graph API da Meta (Instagram)."""
 
+import asyncio
+import logging
+
 import httpx
 
 from app.core.config import settings
 
+logger = logging.getLogger("inboxpilot.ig_api")
+
 # Fluxo "Instagram API with Instagram Login": host é graph.instagram.com
 # (o token IGAA... NÃO funciona em graph.facebook.com).
 GRAPH_BASE = "https://graph.instagram.com"
+
+
+async def _post(url: str, *, params=None, json=None, retries: int = 2) -> dict:
+    """POST com retry/backoff. Repete em erros de rede/timeout e 5xx;
+    4xx (permanente) sobe imediatamente."""
+    last: Exception | None = None
+    for attempt in range(retries + 1):
+        try:
+            async with httpx.AsyncClient(timeout=15) as client:
+                resp = await client.post(url, params=params, json=json)
+                resp.raise_for_status()
+                return resp.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code < 500:
+                raise
+            last = exc
+        except (httpx.TransportError, httpx.TimeoutException) as exc:
+            last = exc
+        if attempt < retries:
+            await asyncio.sleep(0.5 * (attempt + 1))
+            logger.info("Retry %s/%s para %s", attempt + 1, retries, url)
+    assert last is not None
+    raise last
 
 
 async def exchange_for_long_lived(short_token: str) -> dict:
@@ -73,12 +101,7 @@ async def reply_publicly_to_comment(
 ) -> dict:
     """Responde PUBLICAMENTE ao comentário (aparece como reply no post)."""
     url = f"{GRAPH_BASE}/{settings.graph_api_version}/{comment_id}/replies"
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            url, params={"message": message, "access_token": access_token}
-        )
-        resp.raise_for_status()
-        return resp.json()
+    return await _post(url, params={"message": message, "access_token": access_token})
 
 
 def build_message(text: str, buttons: list[dict] | None = None) -> dict:
@@ -117,12 +140,7 @@ async def reply_privately_to_comment(
         "recipient": {"comment_id": comment_id},
         "message": build_message(text, buttons),
     }
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            url, params={"access_token": access_token}, json=payload
-        )
-        resp.raise_for_status()
-        return resp.json()
+    return await _post(url, params={"access_token": access_token}, json=payload)
 
 
 async def send_message_to_user(
@@ -138,12 +156,7 @@ async def send_message_to_user(
         "recipient": {"id": recipient_id},
         "message": build_message(text, buttons),
     }
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            url, params={"access_token": access_token}, json=payload
-        )
-        resp.raise_for_status()
-        return resp.json()
+    return await _post(url, params={"access_token": access_token}, json=payload)
 
 
 async def get_profile(ig_user_id: str, access_token: str) -> dict:

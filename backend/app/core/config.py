@@ -25,8 +25,6 @@ class Settings(BaseSettings):
     webhook_verify_token: str = "troque-este-valor"
     oauth_redirect_uri: str = "http://localhost:8000/instagram/callback"
     graph_api_version: str = "v21.0"
-    # Permite desligar temporariamente a checagem de assinatura (debug).
-    webhook_enforce_signature: bool = True
 
     @property
     def is_production(self) -> bool:

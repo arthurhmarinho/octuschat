@@ -31,8 +31,12 @@ class Automation(Base):
     keyword: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # palavras que, se presentes no comentário, IMPEDEM o disparo (separadas por vírgula)
     exclude_keywords: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    # None = aplica a todos os posts da conta
+    # None = aplica a todos os posts da conta (a menos que bind_next=True)
     post_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    # "próxima publicação": enquanto post_id é None, aguarda o 1º post novo
+    # (id fora de baseline_media_ids) para se vincular a ele.
+    bind_next: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    baseline_media_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
     reply_message: Mapped[str] = mapped_column(Text, nullable=False)
     # resposta PÚBLICA opcional no próprio comentário (ex.: "Enviei no seu direct 🚀")
     public_reply: Mapped[str | None] = mapped_column(String(2048), nullable=True)

@@ -28,7 +28,7 @@ export default function EditAutomationPage() {
           keyword: a.keyword ?? "",
           excludeKeywords: a.exclude_keywords ?? "",
           postId: a.post_id ?? "",
-          scope: a.post_id ? "specific" : "all",
+          scope: a.post_id ? "specific" : a.bind_next ? "next" : "all",
           replyMessage: a.reply_message ?? "",
           publicReply: a.public_reply ?? "",
           buttons,

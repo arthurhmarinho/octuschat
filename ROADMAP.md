@@ -37,7 +37,7 @@ ANALYTICS · GROWTH TOOLS (ref links/QR/widgets) · INTEGRAÇÕES · IA
 | Função | Status | Falta |
 |---|---|---|
 | Comentário em post/reel (palavra-chave ou qualquer) | 🟢 | — |
-| Escopo: post específico / todos | 🟢 | falta opção "próxima publicação" |
+| Escopo: post específico / todos / **próxima publicação** | 🟢 | `bind_next` + baseline de mídias |
 | **Resposta pública ao comentário** ("Enviei no seu direct 🚀") | 🟢 | `public_reply` → POST `/{comment}/replies` |
 | Exclusão de palavras (negative keywords) | 🟢 | `exclude_keywords` no `find_matching` |
 | **Palavra-chave em DM** (Keywords trigger) | ❌ | matching no webhook `messages` |
@@ -135,14 +135,15 @@ ANALYTICS · GROWTH TOOLS (ref links/QR/widgets) · INTEGRAÇÕES · IA
 
 ## 4. Fases de implementação (ordem recomendada)
 
-### Fase 1 — Fechar o caso de uso nº 1 (comment-to-DM completo) ⬅ EM ANDAMENTO
+### Fase 1 — Fechar o caso de uso nº 1 (comment-to-DM completo) ✅ CONCLUÍDA
 O combo mais usado do ManyChat: comentário → **resposta pública** + DM com **botão** → clique abre janela 24h → follow-up com link.
 - [x] Resposta pública automática ao comentário (`public_reply`)
 - [x] Exclusão de palavras-chave (`exclude_keywords`)
 - [x] Botões de link na DM (até 3, button template + fallback) ← falta confirmar ao vivo
+- [x] "Próxima publicação" (`bind_next` + baseline de mídias)
+- [x] Retry/backoff nos envios (`_post` em instagram_api)
 - [ ] Quick Replies (chips) — junto do engine de flow (Fase 3)
-- [ ] Opção "próxima publicação" (rastrear última mídia)
-- [ ] Fila/retry de envio (worker simples)
+- [ ] Fila real/worker (só se escalar; hoje retry inline basta p/ 1-3 pessoas)
 
 ### Fase 2 — Novos gatilhos
 - [ ] Palavra-chave em DM · [ ] Story Reply · [ ] Story Mention · [ ] Default Reply · [ ] Ice breakers · [ ] Ref links (ig.me)

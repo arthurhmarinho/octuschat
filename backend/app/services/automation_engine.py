@@ -79,6 +79,10 @@ async def process_comment(
     # Canoniza para o ig_user_id (chave das automações/contatos, usada no front).
     account_id = account.ig_user_id
 
+    # Vincula automações "próxima publicação" se este comentário é de um post novo.
+    if post_id:
+        await crud.automation.bind_next_posts(db, account_id, post_id)
+
     matches = await crud.automation.find_matching(db, account_id, text, post_id)
     if not matches:
         return

@@ -41,6 +41,28 @@ async def delete(db: AsyncSession, automation: Automation) -> None:
     await db.commit()
 
 
+async def bind_next_posts(db: AsyncSession, account_id: str, media_id: str) -> None:
+    """Vincula automações 'próxima publicação' ao 1º post novo (fora do baseline)."""
+    if not media_id:
+        return
+    result = await db.execute(
+        select(Automation).where(
+            Automation.account_id == account_id,
+            Automation.enabled.is_(True),
+            Automation.bind_next.is_(True),
+            Automation.post_id.is_(None),
+        )
+    )
+    changed = False
+    for auto in result.scalars().all():
+        baseline = auto.baseline_media_ids or []
+        if media_id not in baseline:
+            auto.post_id = media_id  # vincula → passa a agir como "específica"
+            changed = True
+    if changed:
+        await db.commit()
+
+
 async def find_matching(
     db: AsyncSession, account_id: str, text: str, post_id: str | None
 ) -> list[Automation]:
@@ -56,6 +78,9 @@ async def find_matching(
     lowered = (text or "").lower()
     matches: list[Automation] = []
     for auto in candidates:
+        # "Próxima publicação" ainda não vinculada não dispara em post algum.
+        if auto.bind_next and not auto.post_id:
+            continue
         if auto.post_id and auto.post_id != post_id:
             continue
         # Palavras de exclusão: se qualquer uma aparecer, ignora o disparo.
