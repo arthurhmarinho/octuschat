@@ -44,6 +44,7 @@ export default function AppShell({
       <aside className="fixed left-0 top-0 flex h-screen w-16 flex-col items-center border-r border-[var(--border)] bg-[rgba(7,11,20,0.6)] py-4 backdrop-blur-xl">
         <Link
           href="/"
+          title="Octus Chat"
           className="mb-6 flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-[#f8d987] to-[var(--gold-deep)] text-[#2a1e05]"
         >
           <Send size={16} />

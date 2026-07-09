@@ -7,4 +7,4 @@ router = APIRouter(tags=["health"])
 
 @router.get("/health")
 async def health():
-    return {"status": "ok", "service": "inboxpilot-backend"}
+    return {"status": "ok", "service": "octus-chat-backend"}

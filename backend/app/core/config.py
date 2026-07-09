@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     )
 
     # ── App ──────────────────────────────────────────────
-    app_name: str = "InboxPilot API"
+    app_name: str = "Octus Chat API"
     environment: str = "development"  # development | production
     frontend_url: str = "http://localhost:3000"
 

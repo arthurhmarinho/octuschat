@@ -1,16 +1,16 @@
 export const metadata = {
-  title: "Política de Privacidade — InboxPilot",
+  title: "Política de Privacidade — Octus Chat",
 };
 
 export default function PrivacidadePage() {
   return (
     <main className="mx-auto max-w-2xl px-6 py-16 text-sm leading-relaxed text-[var(--fg)]">
-      <h1 className="mb-2 text-2xl font-bold">Política de Privacidade — InboxPilot</h1>
+      <h1 className="mb-2 text-2xl font-bold">Política de Privacidade — Octus Chat</h1>
       <p className="mb-8 text-[var(--muted)]">Última atualização: 30/06/2026</p>
 
       <div className="space-y-5">
         <p>
-          O InboxPilot conecta contas profissionais do Instagram para automatizar
+          O Octus Chat conecta contas profissionais do Instagram para automatizar
           respostas (DMs) a comentários e mensagens. Esta política explica quais dados
           tratamos e como.
         </p>

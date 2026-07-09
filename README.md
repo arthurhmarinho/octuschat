@@ -1,4 +1,4 @@
-# InboxPilot
+# Octus Chat
 
 Automação de DMs do Instagram no estilo **ManyChat**: conecte uma conta
 profissional do Instagram e dispare mensagens automáticas quando alguém
