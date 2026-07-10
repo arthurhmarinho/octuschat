@@ -164,8 +164,9 @@ async def process_inbound_message(
     account_id: str,
     sender_id: str,
     text: str,
+    mid: str | None = None,
 ) -> None:
-    """Registra uma DM recebida do contato (resposta dele) para as Conversas."""
+    """Registra a DM recebida e, se casar um gatilho de DM, responde."""
     if not (sender_id and text):
         return
     account = await crud.account.get_by_any_id(db, account_id)
@@ -175,7 +176,45 @@ async def process_inbound_message(
     # Ignora eco das mensagens enviadas pela própria conta.
     if sender_id in (account_id, account.ig_id):
         return
+
     contact = await crud.contact.upsert(db, account_id, sender_id)
     await _enrich_contact(db, account, contact)
     await crud.message.create(db, account_id, contact.id, "in", text, "dm")
     logger.info("Mensagem recebida de %s registrada.", sender_id)
+
+    # Gatilhos de DM (palavra-chave / resposta padrão).
+    if mid and await crud.message_log.exists_for_comment(db, mid):
+        return  # idempotência: já respondemos esta mensagem
+    matches = await crud.automation.find_matching_dm(db, account_id, text)
+    if not matches:
+        return
+
+    account = await token_service.ensure_fresh(db, account)
+    auto = matches[0]
+    buttons = auto.buttons or None
+    body = auto.reply_message if buttons else compose_message(
+        auto.reply_message, auto.link_url, auto.link_label
+    )
+    log = MessageLog(
+        automation_id=auto.id,
+        comment_id=mid or f"dm:{sender_id}:{contact.id}",
+        recipient_id=sender_id,
+        status="sent",
+    )
+    try:
+        await instagram_api.send_message_to_user(
+            account.ig_user_id, sender_id, body, account.access_token, buttons
+        )
+        logger.info("Automação de DM '%s' disparada para %s.", auto.name, sender_id)
+    except Exception as exc:  # noqa: BLE001
+        log.status = "failed"
+        log.error = str(exc)
+        logger.exception("Falha ao responder DM: %s", exc)
+    db.add(log)
+    await db.commit()
+
+    if log.status == "sent":
+        stored = body
+        if buttons:
+            stored += "\n\n" + "\n".join(f"[{b['label']}] → {b['url']}" for b in buttons)
+        await crud.message.create(db, account_id, contact.id, "out", stored, "dm")

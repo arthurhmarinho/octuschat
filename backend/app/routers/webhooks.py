@@ -69,6 +69,7 @@ async def receive_event(request: Request, db: AsyncSession = Depends(get_session
                 account_id=account_id,
                 sender_id=(event.get("sender") or {}).get("id", ""),
                 text=message.get("text", ""),
+                mid=message.get("mid"),
             )
 
     # A Meta espera 200 rápido.

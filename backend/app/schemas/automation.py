@@ -4,7 +4,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from app.models.automation import TriggerType
+from app.models.automation import KEYWORD_TRIGGERS, TriggerType
 
 
 class Button(BaseModel):
@@ -28,8 +28,8 @@ class AutomationBase(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self):
-        if self.trigger == TriggerType.COMMENT_KEYWORD and not self.keyword:
-            raise ValueError("keyword é obrigatória quando trigger é comment_keyword")
+        if self.trigger in KEYWORD_TRIGGERS and not self.keyword:
+            raise ValueError("keyword é obrigatória para gatilhos de palavra-chave")
         if self.link_url and not self.link_url.startswith(("http://", "https://")):
             raise ValueError("link_url deve começar com http:// ou https://")
         if self.link_label and not self.link_url:

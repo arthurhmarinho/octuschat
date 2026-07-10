@@ -9,7 +9,7 @@ import DmPreview from "@/components/DmPreview";
 import PostPicker from "@/components/PostPicker";
 import { useAccount } from "@/lib/account";
 
-type Trigger = "comment_any" | "comment_keyword";
+type Trigger = "comment_any" | "comment_keyword" | "dm_keyword" | "dm_any";
 type Scope = "all" | "specific" | "next";
 type Button = { label: string; url: string };
 type SaveState = { kind: "idle" | "saving" | "ok" | "error"; msg?: string };
@@ -68,6 +68,9 @@ export default function AutomationForm({
   const updateButton = (i: number, field: keyof Button, value: string) =>
     setButtons((b) => b.map((x, idx) => (idx === i ? { ...x, [field]: value } : x)));
 
+  const isComment = trigger === "comment_any" || trigger === "comment_keyword";
+  const isKeyword = trigger === "comment_keyword" || trigger === "dm_keyword";
+
   async function handleSave() {
     if (!isEdit && !accountId) {
       setSave({ kind: "error", msg: "Nenhuma conta do Instagram conectada." });
@@ -84,12 +87,13 @@ export default function AutomationForm({
     const payload: Record<string, unknown> = {
       name,
       trigger,
-      keyword: trigger === "comment_keyword" ? keyword : null,
+      keyword: isKeyword ? keyword : null,
       exclude_keywords: excludeKeywords || null,
-      post_id: scope === "specific" ? postId || null : null,
-      bind_next: scope === "next",
+      // Escopo de post e resposta pública só valem para gatilhos de comentário.
+      post_id: isComment && scope === "specific" ? postId || null : null,
+      bind_next: isComment && scope === "next",
       reply_message: replyMessage,
-      public_reply: publicReply || null,
+      public_reply: isComment ? publicReply || null : null,
       buttons: cleanButtons.length ? cleanButtons : null,
       link_url: null,
       link_label: null,
@@ -156,12 +160,18 @@ export default function AutomationForm({
                 value={trigger}
                 onChange={(e) => setTrigger(e.target.value as Trigger)}
               >
-                <option value="comment_keyword">Comentário com palavra-chave</option>
-                <option value="comment_any">Qualquer comentário</option>
+                <optgroup label="Comentário no post">
+                  <option value="comment_keyword">Comentário com palavra-chave</option>
+                  <option value="comment_any">Qualquer comentário</option>
+                </optgroup>
+                <optgroup label="Mensagem direta (DM)">
+                  <option value="dm_keyword">Palavra-chave na DM</option>
+                  <option value="dm_any">Qualquer DM (resposta padrão)</option>
+                </optgroup>
               </select>
             </div>
 
-            {trigger === "comment_keyword" && (
+            {isKeyword && (
               <div>
                 <label className={labelCls}>Palavra-chave</label>
                 <input
@@ -186,6 +196,7 @@ export default function AutomationForm({
               </p>
             </div>
 
+            {isComment && (
             <div>
               <label className={labelCls}>Aplicar em</label>
               <div className="grid grid-cols-3 gap-3">
@@ -230,6 +241,14 @@ export default function AutomationForm({
                 </p>
               )}
             </div>
+            )}
+
+            {!isComment && (
+              <p className="rounded-lg border border-dashed border-[var(--border)] p-3 text-xs text-[var(--muted)]">
+                Gatilho de <strong>mensagem direta</strong>: responde quando alguém te
+                envia uma DM {trigger === "dm_keyword" ? "com a palavra-chave" : "(qualquer mensagem)"}.
+              </p>
+            )}
 
             <div>
               <label className={labelCls}>Mensagem (texto) — vai na DM</label>
@@ -241,18 +260,20 @@ export default function AutomationForm({
               />
             </div>
 
-            <div>
-              <label className={labelCls}>Resposta pública no comentário (opcional)</label>
-              <input
-                className={inputCls}
-                value={publicReply}
-                onChange={(e) => setPublicReply(e.target.value)}
-                placeholder="Ex.: Enviei no seu direct 🚀"
-              />
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                Aparece como resposta pública no post — dá prova social e incentiva mais comentários.
-              </p>
-            </div>
+            {isComment && (
+              <div>
+                <label className={labelCls}>Resposta pública no comentário (opcional)</label>
+                <input
+                  className={inputCls}
+                  value={publicReply}
+                  onChange={(e) => setPublicReply(e.target.value)}
+                  placeholder="Ex.: Enviei no seu direct 🚀"
+                />
+                <p className="mt-1 text-xs text-[var(--muted)]">
+                  Aparece como resposta pública no post — dá prova social e incentiva mais comentários.
+                </p>
+              </div>
+            )}
 
             <div>
               <label className={labelCls}>Botões de link (até 3)</label>

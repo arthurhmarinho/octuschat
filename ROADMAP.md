@@ -40,11 +40,11 @@ ANALYTICS · GROWTH TOOLS (ref links/QR/widgets) · INTEGRAÇÕES · IA
 | Escopo: post específico / todos / **próxima publicação** | 🟢 | `bind_next` + baseline de mídias |
 | **Resposta pública ao comentário** ("Enviei no seu direct 🚀") | 🟢 | `public_reply` → POST `/{comment}/replies` |
 | Exclusão de palavras (negative keywords) | 🟢 | `exclude_keywords` no `find_matching` |
-| **Palavra-chave em DM** (Keywords trigger) | ❌ | matching no webhook `messages` |
+| **Palavra-chave em DM** (Keywords trigger) | 🟢 | `dm_keyword` → `find_matching_dm` no webhook `messages` |
 | **Story Reply** (resposta/reação a story, c/ keywords) | ❌ | webhook `messages` c/ `reply_to.story` |
 | **Story Mention** (mencionaram a conta no story) | ❌ | webhook `message` c/ attachment story_mention |
 | Live comments | ❌ | campo `live_comments` |
-| Default Reply (fallback p/ qualquer DM sem match) | ❌ | flag por conta |
+| Default Reply (fallback p/ qualquer DM sem match) | 🟢 | `dm_any` (fallback no `find_matching_dm`) |
 | Welcome / Conversation starters (ice breakers) | ❌ | API de ice breakers |
 | Ref URL (ig.me) / QR code | ❌ | gerar links + parse de ref |
 | AI Intents (gatilho por intenção, não keyword) | ❌ | LLM (fase IA) |
@@ -145,8 +145,11 @@ O combo mais usado do ManyChat: comentário → **resposta pública** + DM com *
 - [ ] Quick Replies (chips) — junto do engine de flow (Fase 3)
 - [ ] Fila real/worker (só se escalar; hoje retry inline basta p/ 1-3 pessoas)
 
-### Fase 2 — Novos gatilhos
-- [ ] Palavra-chave em DM · [ ] Story Reply · [ ] Story Mention · [ ] Default Reply · [ ] Ice breakers · [ ] Ref links (ig.me)
+### Fase 2 — Novos gatilhos ⬅ EM ANDAMENTO (por partes testáveis)
+- [x] **Parte 1:** Palavra-chave em DM (`dm_keyword`) + Default Reply (`dm_any`)
+- [ ] **Parte 2:** Story Reply (resposta a story, c/ keyword)
+- [ ] **Parte 3:** Story Mention
+- [ ] **Parte 4 (opc):** Ice breakers · Ref links (ig.me)
 
 ### Fase 3 — Flow Builder visual + engine multi-step
 - [ ] Canvas (React Flow) · [ ] Engine: mensagem→condição→delay→ação · [ ] Rascunho/publicar · [ ] Randomizador

@@ -12,6 +12,14 @@ from app.core.database import Base
 class TriggerType(str, enum.Enum):
     COMMENT_ANY = "comment_any"          # qualquer comentário no post
     COMMENT_KEYWORD = "comment_keyword"  # comentário contendo palavra-chave
+    DM_KEYWORD = "dm_keyword"            # DM recebida contendo palavra-chave
+    DM_ANY = "dm_any"                    # qualquer DM (resposta padrão / fallback)
+
+
+# Conjuntos auxiliares para saber o "canal" do gatilho.
+COMMENT_TRIGGERS = {TriggerType.COMMENT_ANY, TriggerType.COMMENT_KEYWORD}
+DM_TRIGGERS = {TriggerType.DM_KEYWORD, TriggerType.DM_ANY}
+KEYWORD_TRIGGERS = {TriggerType.COMMENT_KEYWORD, TriggerType.DM_KEYWORD}
 
 
 class Automation(Base):

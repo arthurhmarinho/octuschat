@@ -2,17 +2,25 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Workflow, KeyRound, MessageSquareReply, Pencil, Trash2 } from "lucide-react";
+import { Plus, Workflow, KeyRound, MessageSquareReply, MessageCircle, Pencil, Trash2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { useAccount } from "@/lib/account";
 
+type Trigger = "comment_any" | "comment_keyword" | "dm_keyword" | "dm_any";
 type Automation = {
   id: number;
   name: string;
-  trigger: "comment_any" | "comment_keyword";
+  trigger: Trigger;
   keyword: string | null;
   reply_message: string;
   enabled: boolean;
+};
+
+const TRIGGER_LABEL: Record<Trigger, string> = {
+  comment_keyword: "comentário",
+  comment_any: "qualquer comentário",
+  dm_keyword: "DM",
+  dm_any: "qualquer DM (padrão)",
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -84,14 +92,20 @@ export default function AutomationsPage() {
               className={`flex items-center gap-4 px-5 py-4 ${busy === a.id ? "opacity-50" : ""}`}
             >
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--gold)]/10 text-[var(--gold)]">
-                {a.trigger === "comment_keyword" ? <KeyRound size={16} /> : <MessageSquareReply size={16} />}
+                {a.trigger.startsWith("dm") ? (
+                  <MessageCircle size={16} />
+                ) : a.keyword ? (
+                  <KeyRound size={16} />
+                ) : (
+                  <MessageSquareReply size={16} />
+                )}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium">{a.name || "Sem nome"}</p>
                 <p className="mono truncate text-xs text-[var(--muted)]">
-                  {a.trigger === "comment_keyword"
-                    ? `palavra-chave: "${a.keyword}"`
-                    : "qualquer comentário"}
+                  {a.keyword
+                    ? `${TRIGGER_LABEL[a.trigger]}: "${a.keyword}"`
+                    : TRIGGER_LABEL[a.trigger]}
                 </p>
               </div>
 

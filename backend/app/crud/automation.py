@@ -4,6 +4,14 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.automation import Automation, TriggerType
+
+
+def _excluded(auto: Automation, lowered: str) -> bool:
+    """True se o texto contém alguma palavra de exclusão da automação."""
+    if not auto.exclude_keywords:
+        return False
+    blocked = [w.strip().lower() for w in auto.exclude_keywords.split(",") if w.strip()]
+    return any(w in lowered for w in blocked)
 from app.schemas.automation import AutomationCreate, AutomationUpdate
 
 
@@ -83,14 +91,45 @@ async def find_matching(
             continue
         if auto.post_id and auto.post_id != post_id:
             continue
-        # Palavras de exclusão: se qualquer uma aparecer, ignora o disparo.
-        if auto.exclude_keywords:
-            blocked = [w.strip().lower() for w in auto.exclude_keywords.split(",") if w.strip()]
-            if any(w in lowered for w in blocked):
-                continue
+        if _excluded(auto, lowered):
+            continue
         if auto.trigger == TriggerType.COMMENT_ANY:
             matches.append(auto)
         elif auto.trigger == TriggerType.COMMENT_KEYWORD and auto.keyword:
             if auto.keyword.lower() in lowered:
                 matches.append(auto)
     return matches
+
+
+async def find_matching_dm(
+    db: AsyncSession, account_id: str, text: str
+) -> list[Automation]:
+    """Casa automações de DM. Palavra-chave tem prioridade; se nenhuma casar,
+    cai nas de resposta padrão (dm_any)."""
+    result = await db.execute(
+        select(Automation).where(
+            Automation.account_id == account_id,
+            Automation.enabled.is_(True),
+            Automation.trigger.in_([TriggerType.DM_KEYWORD, TriggerType.DM_ANY]),
+        )
+    )
+    candidates = list(result.scalars().all())
+    lowered = (text or "").lower()
+
+    keyword_matches = [
+        a
+        for a in candidates
+        if a.trigger == TriggerType.DM_KEYWORD
+        and a.keyword
+        and not _excluded(a, lowered)
+        and a.keyword.lower() in lowered
+    ]
+    if keyword_matches:
+        return keyword_matches
+
+    # Fallback: resposta padrão (respeitando exclusão).
+    return [
+        a
+        for a in candidates
+        if a.trigger == TriggerType.DM_ANY and not _excluded(a, lowered)
+    ]
