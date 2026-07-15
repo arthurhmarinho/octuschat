@@ -41,7 +41,7 @@ ANALYTICS · GROWTH TOOLS (ref links/QR/widgets) · INTEGRAÇÕES · IA
 | **Resposta pública ao comentário** ("Enviei no seu direct 🚀") | 🟢 | `public_reply` → POST `/{comment}/replies` |
 | Exclusão de palavras (negative keywords) | 🟢 | `exclude_keywords` no `find_matching` |
 | **Palavra-chave em DM** (Keywords trigger) | 🟢 | `dm_keyword` → `find_matching_dm` no webhook `messages` |
-| **Story Reply** (resposta/reação a story, c/ keywords) | ❌ | webhook `messages` c/ `reply_to.story` |
+| **Story Reply** (resposta/reação a story, c/ keywords) | 🟢 | `story_reply` (keyword opcional) → `find_matching_story` via `reply_to.story` |
 | **Story Mention** (mencionaram a conta no story) | ❌ | webhook `message` c/ attachment story_mention |
 | Live comments | ❌ | campo `live_comments` |
 | Default Reply (fallback p/ qualquer DM sem match) | 🟢 | `dm_any` (fallback no `find_matching_dm`) |
@@ -147,7 +147,7 @@ O combo mais usado do ManyChat: comentário → **resposta pública** + DM com *
 
 ### Fase 2 — Novos gatilhos ⬅ EM ANDAMENTO (por partes testáveis)
 - [x] **Parte 1:** Palavra-chave em DM (`dm_keyword`) + Default Reply (`dm_any`)
-- [ ] **Parte 2:** Story Reply (resposta a story, c/ keyword)
+- [x] **Parte 2:** Story Reply (`story_reply`, keyword opcional) — via `reply_to.story` no webhook
 - [ ] **Parte 3:** Story Mention
 - [ ] **Parte 4 (opc):** Ice breakers · Ref links (ig.me)
 

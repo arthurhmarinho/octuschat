@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Workflow, KeyRound, MessageSquareReply, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import { Plus, Workflow, KeyRound, MessageSquareReply, MessageCircle, Camera, Pencil, Trash2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { useAccount } from "@/lib/account";
 
-type Trigger = "comment_any" | "comment_keyword" | "dm_keyword" | "dm_any";
+type Trigger = "comment_any" | "comment_keyword" | "dm_keyword" | "dm_any" | "story_reply";
 type Automation = {
   id: number;
   name: string;
@@ -21,6 +21,7 @@ const TRIGGER_LABEL: Record<Trigger, string> = {
   comment_any: "qualquer comentário",
   dm_keyword: "DM",
   dm_any: "qualquer DM (padrão)",
+  story_reply: "resposta ao story",
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -92,7 +93,9 @@ export default function AutomationsPage() {
               className={`flex items-center gap-4 px-5 py-4 ${busy === a.id ? "opacity-50" : ""}`}
             >
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--gold)]/10 text-[var(--gold)]">
-                {a.trigger.startsWith("dm") ? (
+                {a.trigger === "story_reply" ? (
+                  <Camera size={16} />
+                ) : a.trigger.startsWith("dm") ? (
                   <MessageCircle size={16} />
                 ) : a.keyword ? (
                   <KeyRound size={16} />

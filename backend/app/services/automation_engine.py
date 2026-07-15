@@ -165,8 +165,13 @@ async def process_inbound_message(
     sender_id: str,
     text: str,
     mid: str | None = None,
+    reply_to: dict | None = None,
 ) -> None:
-    """Registra a DM recebida e, se casar um gatilho de DM, responde."""
+    """Registra a DM recebida e, se casar um gatilho, responde.
+
+    Se ``reply_to`` contém um ``story``, trata como resposta a story e usa os
+    gatilhos de story; caso contrário, usa os gatilhos de DM.
+    """
     if not (sender_id and text):
         return
     account = await crud.account.get_by_any_id(db, account_id)
@@ -177,15 +182,25 @@ async def process_inbound_message(
     if sender_id in (account_id, account.ig_id):
         return
 
+    is_story = bool((reply_to or {}).get("story"))
+    source = "story_reply" if is_story else "dm"
+
     contact = await crud.contact.upsert(db, account_id, sender_id)
     await _enrich_contact(db, account, contact)
-    await crud.message.create(db, account_id, contact.id, "in", text, "dm")
-    logger.info("Mensagem recebida de %s registrada.", sender_id)
+    await crud.message.create(db, account_id, contact.id, "in", text, source)
+    logger.info(
+        "%s recebida de %s registrada.",
+        "Resposta a story" if is_story else "Mensagem",
+        sender_id,
+    )
 
-    # Gatilhos de DM (palavra-chave / resposta padrão).
+    # Gatilhos: story reply vai para os gatilhos de story; senão, DM.
     if mid and await crud.message_log.exists_for_comment(db, mid):
         return  # idempotência: já respondemos esta mensagem
-    matches = await crud.automation.find_matching_dm(db, account_id, text)
+    if is_story:
+        matches = await crud.automation.find_matching_story(db, account_id, text)
+    else:
+        matches = await crud.automation.find_matching_dm(db, account_id, text)
     if not matches:
         return
 
@@ -217,4 +232,4 @@ async def process_inbound_message(
         stored = body
         if buttons:
             stored += "\n\n" + "\n".join(f"[{b['label']}] → {b['url']}" for b in buttons)
-        await crud.message.create(db, account_id, contact.id, "out", stored, "dm")
+        await crud.message.create(db, account_id, contact.id, "out", stored, source)

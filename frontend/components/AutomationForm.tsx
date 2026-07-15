@@ -9,7 +9,7 @@ import DmPreview from "@/components/DmPreview";
 import PostPicker from "@/components/PostPicker";
 import { useAccount } from "@/lib/account";
 
-type Trigger = "comment_any" | "comment_keyword" | "dm_keyword" | "dm_any";
+type Trigger = "comment_any" | "comment_keyword" | "dm_keyword" | "dm_any" | "story_reply";
 type Scope = "all" | "specific" | "next";
 type Button = { label: string; url: string };
 type SaveState = { kind: "idle" | "saving" | "ok" | "error"; msg?: string };
@@ -70,6 +70,9 @@ export default function AutomationForm({
 
   const isComment = trigger === "comment_any" || trigger === "comment_keyword";
   const isKeyword = trigger === "comment_keyword" || trigger === "dm_keyword";
+  const isStory = trigger === "story_reply";
+  // Story reply aceita palavra-chave OPCIONAL (vazia = qualquer resposta).
+  const showKeyword = isKeyword || isStory;
 
   async function handleSave() {
     if (!isEdit && !accountId) {
@@ -87,7 +90,7 @@ export default function AutomationForm({
     const payload: Record<string, unknown> = {
       name,
       trigger,
-      keyword: isKeyword ? keyword : null,
+      keyword: showKeyword ? keyword || null : null,
       exclude_keywords: excludeKeywords || null,
       // Escopo de post e resposta pública só valem para gatilhos de comentário.
       post_id: isComment && scope === "specific" ? postId || null : null,
@@ -168,18 +171,28 @@ export default function AutomationForm({
                   <option value="dm_keyword">Palavra-chave na DM</option>
                   <option value="dm_any">Qualquer DM (resposta padrão)</option>
                 </optgroup>
+                <optgroup label="Story">
+                  <option value="story_reply">Resposta ao story</option>
+                </optgroup>
               </select>
             </div>
 
-            {isKeyword && (
+            {showKeyword && (
               <div>
-                <label className={labelCls}>Palavra-chave</label>
+                <label className={labelCls}>
+                  Palavra-chave {isStory && "(opcional)"}
+                </label>
                 <input
                   className={inputCls}
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
-                  placeholder="Ex.: quero"
+                  placeholder={isStory ? "Ex.: eu quero (vazio = qualquer resposta)" : "Ex.: quero"}
                 />
+                {isStory && (
+                  <p className="mt-1 text-xs text-[var(--muted)]">
+                    Deixe vazio para responder a <strong>qualquer resposta</strong> ao seu story.
+                  </p>
+                )}
               </div>
             )}
 
@@ -245,8 +258,18 @@ export default function AutomationForm({
 
             {!isComment && (
               <p className="rounded-lg border border-dashed border-[var(--border)] p-3 text-xs text-[var(--muted)]">
-                Gatilho de <strong>mensagem direta</strong>: responde quando alguém te
-                envia uma DM {trigger === "dm_keyword" ? "com a palavra-chave" : "(qualquer mensagem)"}.
+                {isStory ? (
+                  <>
+                    Gatilho de <strong>resposta ao story</strong>: quando alguém responder
+                    a um story seu{keyword ? " com a palavra-chave" : " (qualquer resposta)"}, a
+                    DM abaixo é enviada.
+                  </>
+                ) : (
+                  <>
+                    Gatilho de <strong>mensagem direta</strong>: responde quando alguém te
+                    envia uma DM {trigger === "dm_keyword" ? "com a palavra-chave" : "(qualquer mensagem)"}.
+                  </>
+                )}
               </p>
             )}
 

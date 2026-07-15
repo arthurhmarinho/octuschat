@@ -133,3 +133,33 @@ async def find_matching_dm(
         for a in candidates
         if a.trigger == TriggerType.DM_ANY and not _excluded(a, lowered)
     ]
+
+
+async def find_matching_story(
+    db: AsyncSession, account_id: str, text: str
+) -> list[Automation]:
+    """Casa automações de resposta a story. A palavra-chave é opcional:
+    automações COM keyword têm prioridade (se o texto casar); se nenhuma casar,
+    caem as SEM keyword (qualquer resposta ao story)."""
+    result = await db.execute(
+        select(Automation).where(
+            Automation.account_id == account_id,
+            Automation.enabled.is_(True),
+            Automation.trigger == TriggerType.STORY_REPLY,
+        )
+    )
+    candidates = list(result.scalars().all())
+    lowered = (text or "").lower()
+
+    keyword_matches = [
+        a
+        for a in candidates
+        if a.keyword
+        and not _excluded(a, lowered)
+        and a.keyword.lower() in lowered
+    ]
+    if keyword_matches:
+        return keyword_matches
+
+    # Sem keyword = qualquer resposta ao story (respeitando exclusão).
+    return [a for a in candidates if not a.keyword and not _excluded(a, lowered)]

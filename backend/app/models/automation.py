@@ -14,11 +14,14 @@ class TriggerType(str, enum.Enum):
     COMMENT_KEYWORD = "comment_keyword"  # comentário contendo palavra-chave
     DM_KEYWORD = "dm_keyword"            # DM recebida contendo palavra-chave
     DM_ANY = "dm_any"                    # qualquer DM (resposta padrão / fallback)
+    STORY_REPLY = "story_reply"          # resposta a um story (keyword opcional)
 
 
 # Conjuntos auxiliares para saber o "canal" do gatilho.
 COMMENT_TRIGGERS = {TriggerType.COMMENT_ANY, TriggerType.COMMENT_KEYWORD}
 DM_TRIGGERS = {TriggerType.DM_KEYWORD, TriggerType.DM_ANY}
+# Gatilhos que exigem palavra-chave. STORY_REPLY NÃO está aqui: sua keyword é
+# opcional (vazia = qualquer resposta ao story).
 KEYWORD_TRIGGERS = {TriggerType.COMMENT_KEYWORD, TriggerType.DM_KEYWORD}
 
 
