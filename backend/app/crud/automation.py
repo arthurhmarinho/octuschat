@@ -163,3 +163,18 @@ async def find_matching_story(
 
     # Sem keyword = qualquer resposta ao story (respeitando exclusão).
     return [a for a in candidates if not a.keyword and not _excluded(a, lowered)]
+
+
+async def find_matching_story_mention(
+    db: AsyncSession, account_id: str
+) -> list[Automation]:
+    """Casa automações de menção em story. Não há texto/keyword: qualquer menção
+    à conta dispara as automações STORY_MENTION habilitadas."""
+    result = await db.execute(
+        select(Automation).where(
+            Automation.account_id == account_id,
+            Automation.enabled.is_(True),
+            Automation.trigger == TriggerType.STORY_MENTION,
+        )
+    )
+    return list(result.scalars().all())

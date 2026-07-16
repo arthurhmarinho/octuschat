@@ -70,9 +70,11 @@ export default function AutomationForm({
 
   const isComment = trigger === "comment_any" || trigger === "comment_keyword";
   const isKeyword = trigger === "comment_keyword" || trigger === "dm_keyword";
-  const isStory = trigger === "story_reply";
-  // Story reply aceita palavra-chave OPCIONAL (vazia = qualquer resposta).
-  const showKeyword = isKeyword || isStory;
+  const isStoryReply = trigger === "story_reply";
+  const isStoryMention = trigger === "story_mention";
+  // Story reply aceita palavra-chave OPCIONAL (vazia = qualquer resposta);
+  // menção em story não tem texto, então não usa palavra-chave.
+  const showKeyword = isKeyword || isStoryReply;
 
   async function handleSave() {
     if (!isEdit && !accountId) {
@@ -173,6 +175,7 @@ export default function AutomationForm({
                 </optgroup>
                 <optgroup label="Story">
                   <option value="story_reply">Resposta ao story</option>
+                  <option value="story_mention">Menção da conta em story</option>
                 </optgroup>
               </select>
             </div>
@@ -180,15 +183,15 @@ export default function AutomationForm({
             {showKeyword && (
               <div>
                 <label className={labelCls}>
-                  Palavra-chave {isStory && "(opcional)"}
+                  Palavra-chave {isStoryReply && "(opcional)"}
                 </label>
                 <input
                   className={inputCls}
                   value={keyword}
                   onChange={(e) => setKeyword(e.target.value)}
-                  placeholder={isStory ? "Ex.: eu quero (vazio = qualquer resposta)" : "Ex.: quero"}
+                  placeholder={isStoryReply ? "Ex.: eu quero (vazio = qualquer resposta)" : "Ex.: quero"}
                 />
-                {isStory && (
+                {isStoryReply && (
                   <p className="mt-1 text-xs text-[var(--muted)]">
                     Deixe vazio para responder a <strong>qualquer resposta</strong> ao seu story.
                   </p>
@@ -258,7 +261,12 @@ export default function AutomationForm({
 
             {!isComment && (
               <p className="rounded-lg border border-dashed border-[var(--border)] p-3 text-xs text-[var(--muted)]">
-                {isStory ? (
+                {isStoryMention ? (
+                  <>
+                    Gatilho de <strong>menção em story</strong>: quando alguém mencionar sua
+                    conta em um story (o que já abre uma DM), a mensagem abaixo é enviada.
+                  </>
+                ) : isStoryReply ? (
                   <>
                     Gatilho de <strong>resposta ao story</strong>: quando alguém responder
                     a um story seu{keyword ? " com a palavra-chave" : " (qualquer resposta)"}, a

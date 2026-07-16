@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Workflow, KeyRound, MessageSquareReply, MessageCircle, Camera, Pencil, Trash2 } from "lucide-react";
+import { Plus, Workflow, KeyRound, MessageSquareReply, MessageCircle, Camera, AtSign, Pencil, Trash2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import { useAccount } from "@/lib/account";
 
-type Trigger = "comment_any" | "comment_keyword" | "dm_keyword" | "dm_any" | "story_reply";
+type Trigger = "comment_any" | "comment_keyword" | "dm_keyword" | "dm_any" | "story_reply" | "story_mention";
 type Automation = {
   id: number;
   name: string;
@@ -22,6 +22,7 @@ const TRIGGER_LABEL: Record<Trigger, string> = {
   dm_keyword: "DM",
   dm_any: "qualquer DM (padrão)",
   story_reply: "resposta ao story",
+  story_mention: "menção em story",
 };
 
 type LoadState = "loading" | "ready" | "error";
@@ -93,7 +94,9 @@ export default function AutomationsPage() {
               className={`flex items-center gap-4 px-5 py-4 ${busy === a.id ? "opacity-50" : ""}`}
             >
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--gold)]/10 text-[var(--gold)]">
-                {a.trigger === "story_reply" ? (
+                {a.trigger === "story_mention" ? (
+                  <AtSign size={16} />
+                ) : a.trigger === "story_reply" ? (
                   <Camera size={16} />
                 ) : a.trigger.startsWith("dm") ? (
                   <MessageCircle size={16} />
