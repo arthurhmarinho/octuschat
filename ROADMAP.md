@@ -54,7 +54,7 @@ ANALYTICS · GROWTH TOOLS (ref links/QR/widgets) · INTEGRAÇÕES · IA
 |---|---|---|
 | Quick Automation (form guiado simples) | 🟢 | é o nosso builder atual |
 | **Flow Builder visual (canvas, nós arrastáveis)** | ❌ | React Flow + engine multi-step (o grande rework) |
-| Multi-mensagem em sequência num flow | ❌ | engine de passos |
+| Multi-mensagem em sequência num flow | 🟢 | coluna `flow` (passos extras) + `_send_followups` no engine |
 | Condição (if/else) | ❌ | engine |
 | Ações (tag, campo, notificar, webhook externo) | ❌ | engine + CRM |
 | Smart Delay (duração/data + janela de horário) | ❌ | scheduler/worker |
@@ -145,14 +145,17 @@ O combo mais usado do ManyChat: comentário → **resposta pública** + DM com *
 - [ ] Quick Replies (chips) — junto do engine de flow (Fase 3)
 - [ ] Fila real/worker (só se escalar; hoje retry inline basta p/ 1-3 pessoas)
 
-### Fase 2 — Novos gatilhos ⬅ EM ANDAMENTO (por partes testáveis)
+### Fase 2 — Novos gatilhos ✅ CONCLUÍDA (por partes testáveis)
 - [x] **Parte 1:** Palavra-chave em DM (`dm_keyword`) + Default Reply (`dm_any`)
 - [x] **Parte 2:** Story Reply (`story_reply`, keyword opcional) — via `reply_to.story` no webhook
 - [x] **Parte 3:** Story Mention (`story_mention`) — via attachment `story_mention` no webhook
 - [ ] **Parte 4 (opc):** Ice breakers · Ref links (ig.me)
 
-### Fase 3 — Flow Builder visual + engine multi-step
-- [ ] Canvas (React Flow) · [ ] Engine: mensagem→condição→delay→ação · [ ] Rascunho/publicar · [ ] Randomizador
+### Fase 3 — Flow Builder visual + engine multi-step ⬅ EM ANDAMENTO (por partes testáveis)
+- [x] **Parte 1:** Mensagens em sequência (coluna `flow` + `_send_followups`) + repetidor no builder + preview empilhado
+- [ ] **Parte 2:** Canvas visual (React Flow) sobre o modelo `flow`
+- [ ] **Parte 3:** Nós de Condição (if/else) · Smart Delay (worker) · Quick Replies (postback)
+- [ ] **Parte 4:** Rascunho vs publicado · Randomizador (A/B)
 
 ### Fase 4 — CRM completo
 - [ ] Tags · [ ] Campos custom · [ ] Segmentos · [ ] Sequências (scheduler) · [ ] Broadcast real

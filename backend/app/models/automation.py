@@ -58,6 +58,10 @@ class Automation(Base):
     link_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Botões de link na DM (até 3): lista de {"label": str, "url": str}.
     buttons: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Fase 3 — Flow multi-step. Passos ADICIONAIS enviados em sequência após a
+    # mensagem 1 (reply_message+buttons). Lista de {"text": str, "buttons": [...]}.
+    # None/[] = sem passos extras (comportamento das Fases 1/2).
+    flow: Mapped[list | None] = mapped_column(JSON, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

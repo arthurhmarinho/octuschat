@@ -24,6 +24,7 @@ export type AutomationInitial = {
   replyMessage: string;
   publicReply: string;
   buttons: Button[];
+  extraMessages: string[];
 };
 
 const EMPTY: AutomationInitial = {
@@ -36,6 +37,7 @@ const EMPTY: AutomationInitial = {
   replyMessage: "",
   publicReply: "",
   buttons: [],
+  extraMessages: [],
 };
 
 export default function AutomationForm({
@@ -59,6 +61,7 @@ export default function AutomationForm({
   const [replyMessage, setReplyMessage] = useState(start.replyMessage);
   const [publicReply, setPublicReply] = useState(start.publicReply);
   const [buttons, setButtons] = useState<Button[]>(start.buttons);
+  const [extraMessages, setExtraMessages] = useState<string[]>(start.extraMessages);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
 
   const addButton = () =>
@@ -67,6 +70,13 @@ export default function AutomationForm({
     setButtons((b) => b.filter((_, idx) => idx !== i));
   const updateButton = (i: number, field: keyof Button, value: string) =>
     setButtons((b) => b.map((x, idx) => (idx === i ? { ...x, [field]: value } : x)));
+
+  const addMessage = () =>
+    setExtraMessages((m) => (m.length >= 5 ? m : [...m, ""]));
+  const removeMessage = (i: number) =>
+    setExtraMessages((m) => m.filter((_, idx) => idx !== i));
+  const updateMessage = (i: number, value: string) =>
+    setExtraMessages((m) => m.map((x, idx) => (idx === i ? value : x)));
 
   const isComment = trigger === "comment_any" || trigger === "comment_keyword";
   const isKeyword = trigger === "comment_keyword" || trigger === "dm_keyword";
@@ -88,6 +98,10 @@ export default function AutomationForm({
       setSave({ kind: "error", msg: "A URL do botão precisa começar com http:// ou https://" });
       return;
     }
+    const cleanFlow = extraMessages
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .map((text) => ({ text }));
     setSave({ kind: "saving" });
     const payload: Record<string, unknown> = {
       name,
@@ -100,6 +114,7 @@ export default function AutomationForm({
       reply_message: replyMessage,
       public_reply: isComment ? publicReply || null : null,
       buttons: cleanButtons.length ? cleanButtons : null,
+      flow: cleanFlow.length ? cleanFlow : null,
       link_url: null,
       link_label: null,
     };
@@ -345,6 +360,45 @@ export default function AutomationForm({
               )}
             </div>
 
+            <div>
+              <label className={labelCls}>Mensagens seguintes (opcional, até 5)</label>
+              <p className="mb-2 text-xs text-[var(--muted)]">
+                Enviadas em sequência logo após a mensagem acima — como uma conversa.
+              </p>
+              <div className="space-y-2">
+                {extraMessages.map((m, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="mono mt-2.5 w-5 shrink-0 text-center text-xs text-[var(--muted)]">
+                      {i + 2}
+                    </span>
+                    <textarea
+                      className={`${inputCls} min-h-[64px] resize-y`}
+                      value={m}
+                      onChange={(e) => updateMessage(i, e.target.value)}
+                      placeholder={`Mensagem ${i + 2}…`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeMessage(i)}
+                      title="Remover"
+                      className="mt-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-red-500/10 hover:text-red-400"
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              {extraMessages.length < 5 && (
+                <button
+                  type="button"
+                  onClick={addMessage}
+                  className="mt-2 inline-flex items-center gap-1.5 text-sm text-[var(--gold)] hover:underline"
+                >
+                  <Plus size={14} /> Adicionar mensagem
+                </button>
+              )}
+            </div>
+
             <button
               onClick={handleSave}
               disabled={save.kind === "saving"}
@@ -376,6 +430,7 @@ export default function AutomationForm({
               username="sua_conta"
               text={replyMessage}
               buttons={buttons}
+              extraMessages={extraMessages}
             />
           </div>
         </div>

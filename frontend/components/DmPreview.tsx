@@ -9,14 +9,16 @@ type Props = {
   linkUrl?: string;
   linkLabel?: string;
   buttons?: Button[];
+  extraMessages?: string[];
 };
 
 /**
  * Preview ao vivo da DM, renderizado dentro de uma moldura de iPhone
  * (dynamic island + status bar + header do Instagram + barra de digitar).
  */
-export default function DmPreview({ username, text, linkUrl, linkLabel, buttons }: Props) {
+export default function DmPreview({ username, text, linkUrl, linkLabel, buttons, extraMessages }: Props) {
   const validButtons = (buttons ?? []).filter((b) => b.label.trim() || b.url.trim());
+  const validExtras = (extraMessages ?? []).map((m) => m.trim()).filter(Boolean);
   const handle = username || "sua_conta";
 
   return (
@@ -95,6 +97,16 @@ export default function DmPreview({ username, text, linkUrl, linkLabel, buttons 
                 </a>
               )
             )}
+
+            {/* Mensagens seguintes do flow, empilhadas */}
+            {validExtras.map((m, i) => (
+              <div
+                key={i}
+                className="max-w-[82%] whitespace-pre-wrap break-words rounded-2xl rounded-tl-md bg-neutral-800 px-3 py-2 text-sm text-white"
+              >
+                {m}
+              </div>
+            ))}
           </div>
 
           {/* Barra de digitar */}

@@ -55,6 +55,44 @@ def compose_message(
     return f"{text}\n\n{link_url}"
 
 
+def _store_body(text: str, buttons: list | None) -> str:
+    """Texto como fica gravado na conversa (anexa botões de forma legível)."""
+    stored = text
+    if buttons:
+        stored += "\n\n" + "\n".join(f"[{b['label']}] → {b['url']}" for b in buttons)
+    return stored
+
+
+async def _send_followups(
+    db: AsyncSession,
+    account: InstagramAccount,
+    auto,
+    contact: Contact,
+    recipient_id: str,
+    source: str,
+) -> None:
+    """Envia os passos extras do flow (mensagens 2..N) em sequência via DM.
+
+    A janela de 24h já está aberta pela mensagem 1, então todos os passos usam
+    ``send_message_to_user``. Se um passo falha, interrompe a sequência.
+    """
+    for step in auto.flow or []:
+        text = (step.get("text") or "").strip()
+        buttons = step.get("buttons") or None
+        if not text and not buttons:
+            continue
+        try:
+            await instagram_api.send_message_to_user(
+                account.ig_user_id, recipient_id, text, account.access_token, buttons
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Falha em passo do flow de '%s': %s", auto.name, exc)
+            break
+        await crud.message.create(
+            db, account.ig_user_id, contact.id, "out", _store_body(text, buttons), source
+        )
+
+
 async def process_comment(
     db: AsyncSession,
     account_id: str,
@@ -151,12 +189,11 @@ async def process_comment(
             db, account_id, from_user, username=from_username
         )
         await _enrich_contact(db, account, contact)
-        stored = body
-        if buttons:
-            stored += "\n\n" + "\n".join(f"[{b['label']}] → {b['url']}" for b in buttons)
         await crud.message.create(
-            db, account_id, contact.id, "out", stored, "comment_reply"
+            db, account_id, contact.id, "out", _store_body(body, buttons), "comment_reply"
         )
+        # Mensagens seguintes do flow (Fase 3), em sequência.
+        await _send_followups(db, account, auto, contact, from_user, "comment_reply")
 
 
 async def process_inbound_message(
@@ -245,7 +282,8 @@ async def process_inbound_message(
     await db.commit()
 
     if log.status == "sent":
-        stored = body
-        if buttons:
-            stored += "\n\n" + "\n".join(f"[{b['label']}] → {b['url']}" for b in buttons)
-        await crud.message.create(db, account_id, contact.id, "out", stored, source)
+        await crud.message.create(
+            db, account_id, contact.id, "out", _store_body(body, buttons), source
+        )
+        # Mensagens seguintes do flow (Fase 3), em sequência.
+        await _send_followups(db, account, auto, contact, sender_id, source)

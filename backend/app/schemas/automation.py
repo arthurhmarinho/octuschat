@@ -12,6 +12,13 @@ class Button(BaseModel):
     url: str
 
 
+class FlowStep(BaseModel):
+    """Passo adicional do flow (mensagem enviada após a mensagem 1)."""
+
+    text: str = ""
+    buttons: list[Button] | None = None
+
+
 class AutomationBase(BaseModel):
     name: str
     trigger: TriggerType
@@ -24,6 +31,7 @@ class AutomationBase(BaseModel):
     link_url: str | None = None
     link_label: str | None = None
     buttons: list[Button] | None = None
+    flow: list[FlowStep] | None = None
     enabled: bool = True
 
     @model_validator(mode="after")
@@ -42,6 +50,17 @@ class AutomationBase(BaseModel):
                     raise ValueError("a URL do botão deve começar com http:// ou https://")
                 if not b.label.strip():
                     raise ValueError("o botão precisa de um rótulo")
+        if self.flow:
+            if len(self.flow) > 5:
+                raise ValueError("no máximo 5 mensagens adicionais no flow")
+            for step in self.flow:
+                if not step.text.strip() and not step.buttons:
+                    raise ValueError("cada passo do flow precisa de texto ou botões")
+                for b in step.buttons or []:
+                    if not b.url.startswith(("http://", "https://")):
+                        raise ValueError("a URL do botão deve começar com http:// ou https://")
+                    if not b.label.strip():
+                        raise ValueError("o botão precisa de um rótulo")
         return self
 
 
@@ -61,6 +80,7 @@ class AutomationUpdate(BaseModel):
     link_url: str | None = None
     link_label: str | None = None
     buttons: list[Button] | None = None
+    flow: list[FlowStep] | None = None
     enabled: bool | None = None
 
 

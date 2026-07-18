@@ -32,6 +32,9 @@ export default function EditAutomationPage() {
           replyMessage: a.reply_message ?? "",
           publicReply: a.public_reply ?? "",
           buttons,
+          extraMessages: Array.isArray(a.flow)
+            ? a.flow.map((s: { text?: string }) => s.text ?? "")
+            : [],
         });
       })
       .catch(() => setError(true));
