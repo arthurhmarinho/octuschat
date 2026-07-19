@@ -6,11 +6,27 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft, Loader2, Images, Image as ImageIcon, Sparkles, Plus, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import DmPreview from "@/components/DmPreview";
+import FlowCanvas from "@/components/FlowCanvas";
 import PostPicker from "@/components/PostPicker";
 import { useAccount } from "@/lib/account";
 
-type Trigger = "comment_any" | "comment_keyword" | "dm_keyword" | "dm_any" | "story_reply";
+type Trigger =
+  | "comment_any"
+  | "comment_keyword"
+  | "dm_keyword"
+  | "dm_any"
+  | "story_reply"
+  | "story_mention";
 type Scope = "all" | "specific" | "next";
+
+const TRIGGER_SHORT: Record<Trigger, string> = {
+  comment_keyword: "Comentário: palavra-chave",
+  comment_any: "Qualquer comentário",
+  dm_keyword: "DM: palavra-chave",
+  dm_any: "Qualquer DM (padrão)",
+  story_reply: "Resposta ao story",
+  story_mention: "Menção em story",
+};
 type Button = { label: string; url: string };
 type SaveState = { kind: "idle" | "saving" | "ok" | "error"; msg?: string };
 
@@ -71,12 +87,12 @@ export default function AutomationForm({
   const updateButton = (i: number, field: keyof Button, value: string) =>
     setButtons((b) => b.map((x, idx) => (idx === i ? { ...x, [field]: value } : x)));
 
-  const addMessage = () =>
-    setExtraMessages((m) => (m.length >= 5 ? m : [...m, ""]));
-  const removeMessage = (i: number) =>
-    setExtraMessages((m) => m.filter((_, idx) => idx !== i));
-  const updateMessage = (i: number, value: string) =>
-    setExtraMessages((m) => m.map((x, idx) => (idx === i ? value : x)));
+  // O canvas edita a sequência inteira; a mensagem 1 é replyMessage, o resto vai
+  // para extraMessages (que vira o `flow`).
+  const handleMessagesChange = (msgs: string[]) => {
+    setReplyMessage(msgs[0] ?? "");
+    setExtraMessages(msgs.slice(1));
+  };
 
   const isComment = trigger === "comment_any" || trigger === "comment_keyword";
   const isKeyword = trigger === "comment_keyword" || trigger === "dm_keyword";
@@ -147,7 +163,7 @@ export default function AutomationForm({
 
   return (
     <AppShell title={isEdit ? "Editar automação" : "Nova automação"}>
-      <div className="mx-auto max-w-5xl">
+      <div className="mx-auto max-w-6xl">
         <Link
           href="/automations"
           className="mb-6 inline-flex items-center gap-2 text-sm text-[var(--muted)] hover:text-white"
@@ -155,10 +171,24 @@ export default function AutomationForm({
           <ArrowLeft size={16} /> Voltar para automações
         </Link>
 
-        <p className="mb-8 text-sm text-[var(--muted)]">
-          Quando alguém comentar, sua conta envia uma DM automática. O preview à
-          direita atualiza enquanto você edita.
+        <p className="mb-4 text-sm text-[var(--muted)]">
+          Monte o fluxo da automação no canvas: o gatilho dispara a sequência de
+          mensagens, enviadas em ordem. As configurações e o preview ficam abaixo.
         </p>
+
+        {/* ── Canvas do flow (Fase 3) ── */}
+        <div className="mb-8">
+          <label className={labelCls}>Fluxo da automação</label>
+          <FlowCanvas
+            messages={[replyMessage, ...extraMessages]}
+            triggerLabel={
+              showKeyword && keyword
+                ? `${TRIGGER_SHORT[trigger]}: "${keyword}"`
+                : TRIGGER_SHORT[trigger]
+            }
+            onMessagesChange={handleMessagesChange}
+          />
+        </div>
 
         <div className="grid gap-10 md:grid-cols-2">
           {/* ── Formulário ── */}
@@ -296,16 +326,6 @@ export default function AutomationForm({
               </p>
             )}
 
-            <div>
-              <label className={labelCls}>Mensagem (texto) — vai na DM</label>
-              <textarea
-                className={`${inputCls} min-h-[110px] resize-y`}
-                value={replyMessage}
-                onChange={(e) => setReplyMessage(e.target.value)}
-                placeholder="Oi! Obrigado pelo comentário 💜"
-              />
-            </div>
-
             {isComment && (
               <div>
                 <label className={labelCls}>Resposta pública no comentário (opcional)</label>
@@ -356,45 +376,6 @@ export default function AutomationForm({
                   className="mt-2 inline-flex items-center gap-1.5 text-sm text-[var(--gold)] hover:underline"
                 >
                   <Plus size={14} /> Adicionar botão
-                </button>
-              )}
-            </div>
-
-            <div>
-              <label className={labelCls}>Mensagens seguintes (opcional, até 5)</label>
-              <p className="mb-2 text-xs text-[var(--muted)]">
-                Enviadas em sequência logo após a mensagem acima — como uma conversa.
-              </p>
-              <div className="space-y-2">
-                {extraMessages.map((m, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="mono mt-2.5 w-5 shrink-0 text-center text-xs text-[var(--muted)]">
-                      {i + 2}
-                    </span>
-                    <textarea
-                      className={`${inputCls} min-h-[64px] resize-y`}
-                      value={m}
-                      onChange={(e) => updateMessage(i, e.target.value)}
-                      placeholder={`Mensagem ${i + 2}…`}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeMessage(i)}
-                      title="Remover"
-                      className="mt-1.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-red-500/10 hover:text-red-400"
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              {extraMessages.length < 5 && (
-                <button
-                  type="button"
-                  onClick={addMessage}
-                  className="mt-2 inline-flex items-center gap-1.5 text-sm text-[var(--gold)] hover:underline"
-                >
-                  <Plus size={14} /> Adicionar mensagem
                 </button>
               )}
             </div>
