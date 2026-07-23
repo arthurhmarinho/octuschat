@@ -53,7 +53,7 @@ ANALYTICS · GROWTH TOOLS (ref links/QR/widgets) · INTEGRAÇÕES · IA
 | Função | Status | Falta |
 |---|---|---|
 | Quick Automation (form guiado simples) | 🟢 | é o nosso builder atual |
-| **Flow Builder visual (canvas, nós arrastáveis)** | 🟡 | React Flow: canvas com gatilho→mensagens conectados + edição inline + add/remover. Falta arrastar p/ reordenar |
+| **Flow Builder visual (canvas, nós arrastáveis)** | 🟢 | React Flow: gatilho→mensagens conectados, edição inline, add/remover e **arrastar p/ reordenar** |
 | Multi-mensagem em sequência num flow | 🟢 | coluna `flow` (passos extras) + `_send_followups` no engine |
 | Condição (if/else) | ❌ | engine |
 | Ações (tag, campo, notificar, webhook externo) | ❌ | engine + CRM |
@@ -154,7 +154,7 @@ O combo mais usado do ManyChat: comentário → **resposta pública** + DM com *
 ### Fase 3 — Flow Builder visual + engine multi-step ⬅ EM ANDAMENTO (por partes testáveis)
 - [x] **Parte 1:** Mensagens em sequência (coluna `flow` + `_send_followups`) + repetidor no builder + preview empilhado
 - [x] **Parte 2:** Canvas visual (React Flow) sobre o modelo `flow` — gatilho→mensagens, edição inline, add/remover
-- [ ] **Parte 2.1 (opc):** arrastar nós para reordenar a sequência
+- [x] **Parte 2.1:** arrastar nós para reordenar a sequência (ids estáveis por mensagem)
 - [ ] **Parte 3:** Nós de Condição (if/else) · Smart Delay (worker) · Quick Replies (postback)
 - [ ] **Parte 4:** Rascunho vs publicado · Randomizador (A/B)
 
