@@ -12,7 +12,7 @@ from app import crud
 from app.models.account import InstagramAccount
 from app.models.contact import Contact
 from app.models.message_log import MessageLog
-from app.services import instagram_api, token_service
+from app.services import flow_runner, instagram_api, token_service
 from app.services.instagram_api import reply_privately_to_comment
 
 logger = logging.getLogger("inboxpilot.engine")
@@ -70,17 +70,17 @@ async def _send_followups(
     contact: Contact,
     recipient_id: str,
     source: str,
+    context: dict | None = None,
 ) -> None:
-    """Envia os passos extras do flow (mensagens 2..N) em sequência via DM.
+    """Executa o flow (mensagens 2..N) percorrendo o grafo e enviando em ordem.
 
-    A janela de 24h já está aberta pela mensagem 1, então todos os passos usam
-    ``send_message_to_user``. Se um passo falha, interrompe a sequência.
+    O grafo é resolvido por ``flow_runner.plan_steps`` (nós de mensagem e de
+    condição). A janela de 24h já está aberta pela mensagem 1, então todos os
+    passos usam ``send_message_to_user``. Se um passo falha, interrompe.
     """
-    for step in auto.flow or []:
-        text = (step.get("text") or "").strip()
-        buttons = step.get("buttons") or None
-        if not text and not buttons:
-            continue
+    for step in flow_runner.plan_steps(auto.flow, context):
+        text = step["text"]
+        buttons = step["buttons"]
         try:
             await instagram_api.send_message_to_user(
                 account.ig_user_id, recipient_id, text, account.access_token, buttons
@@ -185,6 +185,8 @@ async def process_comment(
 
     # Registra contato + mensagem de saída (alimenta Conversas/Contatos).
     if log.status == "sent" and from_user:
+        # Antes do upsert: saber se é a 1ª interação (condição do flow).
+        is_new_contact = not await crud.contact.exists(db, account_id, from_user)
         contact = await crud.contact.upsert(
             db, account_id, from_user, username=from_username
         )
@@ -192,8 +194,16 @@ async def process_comment(
         await crud.message.create(
             db, account_id, contact.id, "out", _store_body(body, buttons), "comment_reply"
         )
-        # Mensagens seguintes do flow (Fase 3), em sequência.
-        await _send_followups(db, account, auto, contact, from_user, "comment_reply")
+        # Flow (mensagens 2..N, com condições) — Fase 3.
+        await _send_followups(
+            db,
+            account,
+            auto,
+            contact,
+            from_user,
+            "comment_reply",
+            {"text": text, "is_new_contact": is_new_contact},
+        )
 
 
 async def process_inbound_message(
@@ -240,6 +250,8 @@ async def process_inbound_message(
     # Menção sem texto: registra um marcador legível na conversa.
     inbound_text = text or "📸 Mencionou você em um story"
 
+    # Antes do upsert: saber se é a 1ª interação (condição do flow).
+    is_new_contact = not await crud.contact.exists(db, account_id, sender_id)
     contact = await crud.contact.upsert(db, account_id, sender_id)
     await _enrich_contact(db, account, contact)
     await crud.message.create(db, account_id, contact.id, "in", inbound_text, source)
@@ -285,5 +297,13 @@ async def process_inbound_message(
         await crud.message.create(
             db, account_id, contact.id, "out", _store_body(body, buttons), source
         )
-        # Mensagens seguintes do flow (Fase 3), em sequência.
-        await _send_followups(db, account, auto, contact, sender_id, source)
+        # Flow (mensagens 2..N, com condições) — Fase 3.
+        await _send_followups(
+            db,
+            account,
+            auto,
+            contact,
+            sender_id,
+            source,
+            {"text": text, "is_new_contact": is_new_contact},
+        )

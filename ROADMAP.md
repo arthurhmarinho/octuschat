@@ -55,7 +55,7 @@ ANALYTICS · GROWTH TOOLS (ref links/QR/widgets) · INTEGRAÇÕES · IA
 | Quick Automation (form guiado simples) | 🟢 | é o nosso builder atual |
 | **Flow Builder visual (canvas, nós arrastáveis)** | 🟢 | React Flow: gatilho→mensagens conectados, edição inline, add/remover e **arrastar p/ reordenar** |
 | Multi-mensagem em sequência num flow | 🟢 | coluna `flow` (passos extras) + `_send_followups` no engine |
-| Condição (if/else) | ❌ | engine |
+| Condição (if/else) | 🟡 | engine pronto (`flow_runner`: grafo + ramos sim/não). Falta o nó no canvas |
 | Ações (tag, campo, notificar, webhook externo) | ❌ | engine + CRM |
 | Smart Delay (duração/data + janela de horário) | ❌ | scheduler/worker |
 | Randomizador (A/B) | ❌ | engine |
@@ -155,7 +155,10 @@ O combo mais usado do ManyChat: comentário → **resposta pública** + DM com *
 - [x] **Parte 1:** Mensagens em sequência (coluna `flow` + `_send_followups`) + repetidor no builder + preview empilhado
 - [x] **Parte 2:** Canvas visual (React Flow) sobre o modelo `flow` — gatilho→mensagens, edição inline, add/remover
 - [x] **Parte 2.1:** arrastar nós para reordenar a sequência (ids estáveis por mensagem)
-- [ ] **Parte 3:** Nós de Condição (if/else) · Smart Delay (worker) · Quick Replies (postback)
+- [x] **Parte 3.1:** Engine de grafo (`flow_runner`) + nós de Condição (if/else) — backend, retrocompatível
+- [ ] **Parte 3.2:** Nó de Condição no canvas (saídas Sim/Não)
+- [ ] **Parte 3.3:** Quick Replies + postback (retoma o flow no clique — exige estado de execução)
+- [ ] **Parte 3.4:** Smart Delay (worker/scheduler)
 - [ ] **Parte 4:** Rascunho vs publicado · Randomizador (A/B)
 
 ### Fase 4 — CRM completo
