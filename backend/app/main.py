@@ -18,12 +18,15 @@ from app.routers import (
 )
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("inboxpilot")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Em dev/demo criamos as tabelas no startup. Em produção, use Alembic.
     await init_db()
+    if not settings.api_secret:
+        logger.warning("API_SECRET vazio — todas as rotas protegidas vão responder 401.")
     yield
 
 
@@ -32,6 +35,10 @@ app = FastAPI(
     description="Automação de DMs do Instagram via comentários e palavras-chave.",
     version="0.1.0",
     lifespan=lifespan,
+    # Em produção não expomos a documentação/esquema da API.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 
 app.add_middleware(

@@ -6,13 +6,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
 from app import crud
+from app.core.auth import require_api_secret
 from app.core.database import get_session
 from app.schemas.automation import AutomationCreate, AutomationRead, AutomationUpdate
 from app.services import instagram_api, token_service
 
 logger = logging.getLogger("inboxpilot.automations")
 
-router = APIRouter(prefix="/automations", tags=["automations"])
+router = APIRouter(
+    prefix="/automations",
+    tags=["automations"],
+    dependencies=[Depends(require_api_secret)],
+)
 
 
 @router.get("", response_model=list[AutomationRead])

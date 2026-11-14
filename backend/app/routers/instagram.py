@@ -10,6 +10,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
+from app.core.auth import make_oauth_state, require_api_secret, verify_oauth_state
 from app.core.config import settings
 from app.core.database import get_session
 from app.schemas.account import AccountRead
@@ -17,6 +18,10 @@ from app.services import instagram_api, token_service
 
 logger = logging.getLogger("inboxpilot.instagram")
 router = APIRouter(prefix="/instagram", tags=["instagram"])
+
+# Todas as rotas exigem o segredo da API, exceto `/callback` (a Meta
+# redireciona o browser direto para ele; protegido pelo `state` assinado).
+PROTECTED = [Depends(require_api_secret)]
 
 SCOPES = ",".join(
     [
@@ -27,14 +32,19 @@ SCOPES = ",".join(
 )
 
 
-@router.get("/connect")
+@router.get("/connect", dependencies=PROTECTED)
 async def connect():
-    """Redireciona para a tela de autorização da Meta."""
+    """Redireciona para a tela de autorização da Meta.
+
+    Acessado via proxy do Next (`/api/backend/instagram/connect`), que repassa
+    o redirect ao browser.
+    """
     params = {
         "client_id": settings.meta_app_id,
         "redirect_uri": settings.oauth_redirect_uri,
         "scope": SCOPES,
         "response_type": "code",
+        "state": make_oauth_state(),
     }
     return RedirectResponse(
         f"https://www.instagram.com/oauth/authorize?{urlencode(params)}"
@@ -42,8 +52,17 @@ async def connect():
 
 
 @router.get("/callback")
-async def callback(code: str = "", db: AsyncSession = Depends(get_session)):
-    """Troca o `code` por access token e persiste a conta."""
+async def callback(
+    code: str = "", state: str = "", db: AsyncSession = Depends(get_session)
+):
+    """Troca o `code` por access token e persiste a conta.
+
+    Rota pública: a Meta redireciona o browser para cá. O `state` assinado
+    garante que o fluxo foi iniciado por nós (via `/connect` autenticado).
+    """
+    if not verify_oauth_state(state):
+        logger.warning("OAuth callback com state inválido/expirado — rejeitado.")
+        return RedirectResponse(f"{settings.frontend_url}?connected=error")
     if not code:
         return RedirectResponse(f"{settings.frontend_url}?connected=error")
 
@@ -109,12 +128,12 @@ async def callback(code: str = "", db: AsyncSession = Depends(get_session)):
     return RedirectResponse(f"{settings.frontend_url}?connected=ok")
 
 
-@router.get("/accounts", response_model=list[AccountRead])
+@router.get("/accounts", response_model=list[AccountRead], dependencies=PROTECTED)
 async def list_accounts(db: AsyncSession = Depends(get_session)):
     return await crud.account.list_all(db)
 
 
-@router.get("/{account_id}/subscription")
+@router.get("/{account_id}/subscription", dependencies=PROTECTED)
 async def account_subscription(
     account_id: str, db: AsyncSession = Depends(get_session)
 ):
@@ -159,7 +178,7 @@ async def account_subscription(
     return result
 
 
-@router.get("/{account_id}/media")
+@router.get("/{account_id}/media", dependencies=PROTECTED)
 async def list_account_media(
     account_id: str, db: AsyncSession = Depends(get_session)
 ):

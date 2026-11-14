@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     environment: str = "development"  # development | production
     frontend_url: str = "http://localhost:3000"
 
+    # ── Autenticação da API ──────────────────────────────
+    # Segredo compartilhado com o proxy do Next (BACKEND_API_SECRET no front).
+    # Vazio = a API recusa todas as rotas protegidas (falha fechada).
+    api_secret: str = ""
+
     # ── Banco (Supabase Postgres) ────────────────────────
     # Formato async: postgresql+psycopg://USER:PASS@HOST:PORT/DB
     # Use a connection string do *pooler* do Supabase.

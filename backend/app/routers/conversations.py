@@ -4,9 +4,14 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
+from app.core.auth import require_api_secret
 from app.core.database import get_session
 
-router = APIRouter(prefix="/conversations", tags=["conversations"])
+router = APIRouter(
+    prefix="/conversations",
+    tags=["conversations"],
+    dependencies=[Depends(require_api_secret)],
+)
 
 
 @router.get("")
