@@ -12,6 +12,13 @@ export default function ConfiguracoesPage() {
         <p className="mt-1 max-w-sm text-sm text-[var(--muted)]">
           Em breve: conta conectada, token da Meta, preferências da automação.
         </p>
+        {/* Link comum (não <Link>): o proxy responde com redirect para a Meta. */}
+        <a
+          href="/api/backend/instagram/connect"
+          className="btn-gold mt-6 rounded-lg px-4 py-2.5 text-sm"
+        >
+          Conectar Instagram
+        </a>
       </div>
     </AppShell>
   );

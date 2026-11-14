@@ -11,6 +11,7 @@ import {
   Send,
   Settings,
   HelpCircle,
+  LogOut,
 } from "lucide-react";
 import type { ReactNode } from "react";
 
@@ -37,6 +38,11 @@ export default function AppShell({
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+    window.location.replace("/login");
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -72,6 +78,14 @@ export default function AppShell({
             );
           })}
         </nav>
+
+        <button
+          title="Sair"
+          onClick={logout}
+          className="mb-1.5 flex h-10 w-10 items-center justify-center rounded-xl text-[var(--muted)] hover:bg-white/5 hover:text-white"
+        >
+          <LogOut size={19} />
+        </button>
 
         <button
           title="Ajuda"
