@@ -11,18 +11,23 @@ from app.models.account import InstagramAccount
 async def upsert(
     db: AsyncSession,
     ig_user_id: str,
-    access_token: str,
+    access_token_enc: str,
     username: str | None = None,
     token_expires_at: datetime | None = None,
     ig_id: str | None = None,
 ) -> InstagramAccount:
-    """Cria ou atualiza a conta (re-conexão atualiza o token)."""
+    """Cria ou atualiza a conta (re-conexão atualiza o token).
+
+    `access_token_enc` já vem cifrado (token_service.encrypt_token).
+    """
     account = await db.get(InstagramAccount, ig_user_id)
     if account is None:
-        account = InstagramAccount(ig_user_id=ig_user_id, access_token=access_token)
+        account = InstagramAccount(
+            ig_user_id=ig_user_id, access_token_enc=access_token_enc
+        )
         db.add(account)
     else:
-        account.access_token = access_token
+        account.access_token_enc = access_token_enc
     if username is not None:
         account.username = username
     if token_expires_at is not None:

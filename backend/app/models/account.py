@@ -17,7 +17,9 @@ class InstagramAccount(Base):
     # ser DIFERENTE do ig_user_id. Guardamos para casar os eventos recebidos.
     ig_id: Mapped[str | None] = mapped_column(String(64), index=True, nullable=True)
     username: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    access_token: Mapped[str] = mapped_column(String, nullable=False)
+    # Token da Meta CIFRADO (Fernet). Nunca leia direto: use
+    # token_service.read_token()/get_valid_token().
+    access_token_enc: Mapped[str] = mapped_column(String, nullable=False)
     token_expires_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

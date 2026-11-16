@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import crud
 from app.core.auth import make_oauth_state, require_api_secret, verify_oauth_state
 from app.core.config import settings
+from app.core.security import redact_secrets
 from app.core.database import get_session
 from app.schemas.account import AccountRead
 from app.services import instagram_api, token_service
@@ -111,7 +112,7 @@ async def callback(
     await crud.account.upsert(
         db,
         ig_user_id=ig_user_id,
-        access_token=access_token,
+        access_token_enc=token_service.encrypt_token(access_token),
         username=username,
         token_expires_at=expires_at,
         ig_id=ig_id,
@@ -145,14 +146,12 @@ async def account_subscription(
     account = await crud.account.get_by_any_id(db, account_id)
     if account is None:
         raise HTTPException(404, "Conta do Instagram não conectada")
-    account = await token_service.ensure_fresh(db, account)
+    token = await token_service.get_valid_token(db, account)
     result: dict = {"ig_user_id": account.ig_user_id, "ig_id": account.ig_id}
 
     # Backfill do ig_id (id usado no webhook) sem precisar reconectar.
     try:
-        profile = await instagram_api.get_profile(
-            account.ig_user_id, account.access_token
-        )
+        profile = await instagram_api.get_profile(account.ig_user_id, token)
         result["profile"] = profile
         # `user_id` do /me = entry.id do webhook (difere do `id`/ig_user_id).
         webhook_id = profile.get("user_id")
@@ -161,20 +160,20 @@ async def account_subscription(
             await db.commit()
             result["ig_id_updated"] = account.ig_id
     except Exception as exc:  # noqa: BLE001
-        result["profile_error"] = str(exc)
+        result["profile_error"] = redact_secrets(str(exc))
 
     try:
         result["subscribe_now"] = await instagram_api.subscribe_webhooks(
-            account.ig_user_id, account.access_token
+            account.ig_user_id, token
         )
     except Exception as exc:  # noqa: BLE001
-        result["subscribe_error"] = str(exc)
+        result["subscribe_error"] = redact_secrets(str(exc))
     try:
         result["current"] = await instagram_api.get_subscribed_apps(
-            account.ig_user_id, account.access_token
+            account.ig_user_id, token
         )
     except Exception as exc:  # noqa: BLE001
-        result["get_error"] = str(exc)
+        result["get_error"] = redact_secrets(str(exc))
     return result
 
 
@@ -186,11 +185,9 @@ async def list_account_media(
     account = await crud.account.get(db, account_id)
     if account is None:
         raise HTTPException(404, "Conta do Instagram não conectada")
-    account = await token_service.ensure_fresh(db, account)
     try:
-        return await instagram_api.list_media(
-            account.ig_user_id, account.access_token
-        )
+        token = await token_service.get_valid_token(db, account)
+        return await instagram_api.list_media(account.ig_user_id, token)
     except Exception as exc:  # noqa: BLE001
         # Ex.: token inválido (conta demo) — frontend cai no fallback manual.
-        raise HTTPException(502, f"Falha ao buscar mídia: {exc}")
+        raise HTTPException(502, f"Falha ao buscar mídia: {redact_secrets(str(exc))}")

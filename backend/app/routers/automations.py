@@ -40,10 +40,8 @@ async def create_automation(
     # detectar o 1º post novo e vincular a automação a ele.
     if data.bind_next and not data.post_id:
         try:
-            account = await token_service.ensure_fresh(db, account)
-            media = await instagram_api.list_media(
-                account.ig_user_id, account.access_token, limit=50
-            )
+            token = await token_service.get_valid_token(db, account)
+            media = await instagram_api.list_media(account.ig_user_id, token, limit=50)
             automation.baseline_media_ids = [m["id"] for m in media if m.get("id")]
             await db.commit()
             await db.refresh(automation)

@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.core import crypto
 from app.core.config import settings
 from app.routers import (
     automations,
@@ -17,6 +18,9 @@ from app.routers import (
 )
 
 logging.basicConfig(level=logging.INFO)
+# O httpx loga cada URL em INFO — com query strings que podem ter segredos
+# (ex.: troca/renovação de token). Só avisos e erros.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("inboxpilot")
 
 
@@ -25,6 +29,10 @@ async def lifespan(app: FastAPI):
     # O schema é gerido pelo Alembic (`alembic upgrade head`), não no startup.
     if not settings.api_secret:
         logger.warning("API_SECRET vazio — todas as rotas protegidas vão responder 401.")
+    if not crypto.is_configured():
+        logger.error(
+            "TOKEN_ENCRYPTION_KEYS ausente ou inválida — não dá para ler os tokens da Meta."
+        )
     yield
 
 

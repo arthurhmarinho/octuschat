@@ -8,3 +8,4 @@ python-dotenv>=1.0
 SQLAlchemy[asyncio]>=2.0.36
 psycopg[binary]>=3.3
 alembic>=1.14
+cryptography>=44

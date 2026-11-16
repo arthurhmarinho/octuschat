@@ -9,6 +9,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
+from app.core.security import redact_secrets
 from app.models.account import InstagramAccount
 from app.models.contact import Contact
 from app.models.message_log import MessageLog
@@ -19,15 +20,13 @@ logger = logging.getLogger("inboxpilot.engine")
 
 
 async def _enrich_contact(
-    db: AsyncSession, account: InstagramAccount, contact: Contact
+    db: AsyncSession, account: InstagramAccount, contact: Contact, token: str
 ) -> None:
     """Preenche foto (e username, se faltar) do contato via API. Best-effort."""
     if contact.profile_pic and contact.username:
         return
     try:
-        prof = await instagram_api.get_user_profile(
-            contact.ig_user_id, account.access_token
-        )
+        prof = await instagram_api.get_user_profile(contact.ig_user_id, token)
         await crud.contact.upsert(
             db,
             account.ig_user_id,
@@ -70,6 +69,7 @@ async def _send_followups(
     contact: Contact,
     recipient_id: str,
     source: str,
+    token: str,
     context: dict | None = None,
 ) -> None:
     """Executa o flow (mensagens 2..N) percorrendo o grafo e enviando em ordem.
@@ -83,7 +83,7 @@ async def _send_followups(
         buttons = step["buttons"]
         try:
             await instagram_api.send_message_to_user(
-                account.ig_user_id, recipient_id, text, account.access_token, buttons
+                account.ig_user_id, recipient_id, text, token, buttons
             )
         except Exception as exc:  # noqa: BLE001
             logger.warning("Falha em passo do flow de '%s': %s", auto.name, exc)
@@ -113,7 +113,7 @@ async def process_comment(
     if account is None:
         logger.warning("Conta %s não conectada; nada a fazer.", account_id)
         return
-    account = await token_service.ensure_fresh(db, account)
+    token = await token_service.get_valid_token(db, account)
     # Canoniza para o ig_user_id (chave das automações/contatos, usada no front).
     account_id = account.ig_user_id
 
@@ -145,7 +145,7 @@ async def process_comment(
             ig_user_id=account.ig_user_id,
             comment_id=comment_id,
             text=body,
-            access_token=account.access_token,
+            access_token=token,
             buttons=buttons,
         )
         logger.info("Automação '%s' disparada para %s.", auto.name, from_user)
@@ -158,23 +158,23 @@ async def process_comment(
                 ig_user_id=account.ig_user_id,
                 comment_id=comment_id,
                 text=body,
-                access_token=account.access_token,
+                access_token=token,
             )
             if buttons and from_user:
                 await instagram_api.send_message_to_user(
-                    account.ig_user_id, from_user, body, account.access_token, buttons
+                    account.ig_user_id, from_user, body, token, buttons
                 )
             logger.info("Fallback OK para '%s'.", auto.name)
         except Exception as exc2:  # noqa: BLE001
             log.status = "failed"
-            log.error = str(exc2)
+            log.error = redact_secrets(str(exc2))
             logger.exception("Falha ao enviar (mesmo no fallback): %s", exc2)
 
     # Resposta PÚBLICA opcional no comentário (best-effort, não bloqueia a DM).
     if auto.public_reply:
         try:
             await instagram_api.reply_publicly_to_comment(
-                comment_id, auto.public_reply, account.access_token
+                comment_id, auto.public_reply, token
             )
             logger.info("Resposta pública enviada no comentário %s.", comment_id)
         except Exception as exc:  # noqa: BLE001
@@ -190,7 +190,7 @@ async def process_comment(
         contact = await crud.contact.upsert(
             db, account_id, from_user, username=from_username
         )
-        await _enrich_contact(db, account, contact)
+        await _enrich_contact(db, account, contact, token)
         await crud.message.create(
             db, account_id, contact.id, "out", _store_body(body, buttons), "comment_reply"
         )
@@ -202,6 +202,7 @@ async def process_comment(
             contact,
             from_user,
             "comment_reply",
+            token,
             {"text": text, "is_new_contact": is_new_contact},
         )
 
@@ -253,7 +254,7 @@ async def process_inbound_message(
     # Antes do upsert: saber se é a 1ª interação (condição do flow).
     is_new_contact = not await crud.contact.exists(db, account_id, sender_id)
     contact = await crud.contact.upsert(db, account_id, sender_id)
-    await _enrich_contact(db, account, contact)
+    await _enrich_contact(db, account, contact, token_service.read_token(account))
     await crud.message.create(db, account_id, contact.id, "in", inbound_text, source)
     logger.info("%s recebida de %s registrada.", kind, sender_id)
 
@@ -269,7 +270,7 @@ async def process_inbound_message(
     if not matches:
         return
 
-    account = await token_service.ensure_fresh(db, account)
+    token = await token_service.get_valid_token(db, account)
     auto = matches[0]
     buttons = auto.buttons or None
     body = auto.reply_message if buttons else compose_message(
@@ -283,12 +284,12 @@ async def process_inbound_message(
     )
     try:
         await instagram_api.send_message_to_user(
-            account.ig_user_id, sender_id, body, account.access_token, buttons
+            account.ig_user_id, sender_id, body, token, buttons
         )
         logger.info("Automação de DM '%s' disparada para %s.", auto.name, sender_id)
     except Exception as exc:  # noqa: BLE001
         log.status = "failed"
-        log.error = str(exc)
+        log.error = redact_secrets(str(exc))
         logger.exception("Falha ao responder DM: %s", exc)
     db.add(log)
     await db.commit()
@@ -305,5 +306,6 @@ async def process_inbound_message(
             contact,
             sender_id,
             source,
+            token,
             {"text": text, "is_new_contact": is_new_contact},
         )

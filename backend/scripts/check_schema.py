@@ -75,7 +75,8 @@ async def main() -> int:
     if problems:
         print(f"\n{problems} diferença(s). Não faça o stamp ainda.")
         return 1
-    print("Schema confere com os models. Pode rodar: alembic stamp 0001")
+    print("Schema confere com os models.")
+    print("Banco legado (sem tabela alembic_version)? Marque com: alembic stamp 0001")
     return 0
 
 

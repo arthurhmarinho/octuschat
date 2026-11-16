@@ -14,6 +14,8 @@ services:
         sync: false
       - key: API_SECRET
         sync: false
+      - key: TOKEN_ENCRYPTION_KEYS
+        sync: false
       - key: DATABASE_URL
         sync: false
       # Opcional: conexão do session pooler (porta 5432) só para as migrações.

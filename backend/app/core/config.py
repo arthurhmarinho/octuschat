@@ -18,6 +18,12 @@ class Settings(BaseSettings):
     # Vazio = a API recusa todas as rotas protegidas (falha fechada).
     api_secret: str = ""
 
+    # ── Criptografia dos tokens da Meta (Fernet) ─────────
+    # Uma ou mais chaves separadas por vírgula. A 1ª cifra; todas decifram
+    # (permite rotação). Gere com:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    token_encryption_keys: str = ""
+
     # ── Banco (Supabase Postgres) ────────────────────────
     # Formato async: postgresql+psycopg://USER:PASS@HOST:PORT/DB
     # Use a connection string do *pooler* do Supabase.
