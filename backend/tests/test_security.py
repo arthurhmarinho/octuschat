@@ -53,3 +53,30 @@ def test_assinatura_truncada_e_rejeitada():
 def test_corpo_com_unicode():
     body = '{"text":"quero o preço 🚀"}'.encode()
     assert verify_meta_signature(body, sign(body), SECRET)
+
+
+# ── redact_secrets ──────────────────────────────────────────
+
+from app.core.security import redact_secrets  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("texto", "segredo"),
+    [
+        ("GET https://graph.instagram.com/v21.0/me?fields=id&access_token=IGAAxyz123", "IGAAxyz123"),
+        ("url?client_secret=abc123&grant_type=x", "abc123"),
+        ("callback?code=AQDcodigo123#_", "AQDcodigo123"),
+        ("Authorization: Bearer IGAAtokenqualquer.abc-def_123", "IGAAtokenqualquer"),
+        ("token solto IGAAJ1234567890abcdefghijklmnop no meio", "IGAAJ1234567890abcdefghijklmnop"),
+        ("token EAAB1234567890abcdefghijklmnop facebook", "EAAB1234567890abcdefghijklmnop"),
+    ],
+)
+def test_redact_remove_segredos(texto, segredo):
+    limpo = redact_secrets(texto)
+    assert segredo not in limpo
+    assert "***" in limpo
+
+
+def test_redact_preserva_texto_comum():
+    texto = "HTTP 400: Invalid OAuth access token (code 190)"
+    assert redact_secrets(texto) == texto
