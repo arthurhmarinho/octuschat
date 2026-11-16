@@ -95,7 +95,7 @@ def test_mencao_em_story_preserva_attachments():
     assert ev["payload"]["event"]["message"]["attachments"] == att
 
 
-# ── dispatch: mesmos argumentos que o endpoint passava antes da fila ──
+# ── dispatch: dados do evento + limitador do worker ──
 
 
 @pytest.fixture
@@ -124,6 +124,7 @@ async def test_dispatch_comentario(capturado):
         "post_id": "p1",
         "from_user": "u1",
         "from_username": "fulano",
+        "limiter": None,
     }
 
 
@@ -141,6 +142,7 @@ async def test_dispatch_mensagem(capturado):
         "mid": "m1",
         "reply_to": reply_to,
         "attachments": None,
+        "limiter": None,
     }
 
 

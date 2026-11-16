@@ -9,6 +9,14 @@ import DmPreview from "@/components/DmPreview";
 import FlowCanvas from "@/components/FlowCanvas";
 import PostPicker from "@/components/PostPicker";
 import { useAccount } from "@/lib/account";
+import {
+  editorToGraph,
+  graphToEditor,
+  isLinear,
+  type EditorMessage,
+  type FlowGraph,
+  type GraphButton,
+} from "@/lib/flowGraph";
 
 type Trigger =
   | "comment_any"
@@ -27,7 +35,7 @@ const TRIGGER_SHORT: Record<Trigger, string> = {
   story_reply: "Resposta ao story",
   story_mention: "Menção em story",
 };
-type Button = { label: string; url: string };
+type Button = GraphButton;
 type SaveState = { kind: "idle" | "saving" | "ok" | "error"; msg?: string };
 
 export type AutomationInitial = {
@@ -37,10 +45,9 @@ export type AutomationInitial = {
   excludeKeywords: string;
   postId: string;
   scope: Scope;
-  replyMessage: string;
   publicReply: string;
-  buttons: Button[];
-  extraMessages: string[];
+  /** Grafo salvo (null = automação nova). */
+  graph: FlowGraph | null;
 };
 
 const EMPTY: AutomationInitial = {
@@ -50,10 +57,8 @@ const EMPTY: AutomationInitial = {
   excludeKeywords: "",
   postId: "",
   scope: "all",
-  replyMessage: "",
   publicReply: "",
-  buttons: [],
-  extraMessages: [],
+  graph: null,
 };
 
 export default function AutomationForm({
@@ -74,10 +79,13 @@ export default function AutomationForm({
   const [excludeKeywords, setExcludeKeywords] = useState(start.excludeKeywords);
   const [scope, setScope] = useState<Scope>(start.scope);
   const [postId, setPostId] = useState(start.postId);
-  const [replyMessage, setReplyMessage] = useState(start.replyMessage);
   const [publicReply, setPublicReply] = useState(start.publicReply);
-  const [buttons, setButtons] = useState<Button[]>(start.buttons);
-  const [extraMessages, setExtraMessages] = useState<string[]>(start.extraMessages);
+  // O editor trabalha sobre uma cadeia de mensagens (ids = ids dos nós) e os
+  // botões da mensagem 1; o grafo é montado a partir disso.
+  const [initialEditor] = useState(() => graphToEditor(start.graph));
+  const [messages, setMessages] = useState<EditorMessage[]>(initialEditor.messages);
+  const [buttons, setButtons] = useState<Button[]>(initialEditor.buttons);
+  const hasBranches = !isLinear(start.graph);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
 
   const addButton = () =>
@@ -87,12 +95,9 @@ export default function AutomationForm({
   const updateButton = (i: number, field: keyof Button, value: string) =>
     setButtons((b) => b.map((x, idx) => (idx === i ? { ...x, [field]: value } : x)));
 
-  // O canvas edita a sequência inteira; a mensagem 1 é replyMessage, o resto vai
-  // para extraMessages (que vira o `flow`).
-  const handleMessagesChange = (msgs: string[]) => {
-    setReplyMessage(msgs[0] ?? "");
-    setExtraMessages(msgs.slice(1));
-  };
+  const buildGraph = (btns: Button[]) => editorToGraph(messages, btns, start.graph);
+  // Preview: botões ainda incompletos também aparecem (como antes).
+  const previewGraph = buildGraph(buttons);
 
   const isComment = trigger === "comment_any" || trigger === "comment_keyword";
   const isKeyword = trigger === "comment_keyword" || trigger === "dm_keyword";
@@ -114,10 +119,10 @@ export default function AutomationForm({
       setSave({ kind: "error", msg: "A URL do botão precisa começar com http:// ou https://" });
       return;
     }
-    const cleanFlow = extraMessages
-      .map((t) => t.trim())
-      .filter(Boolean)
-      .map((text) => ({ text }));
+    if (!messages[0]?.text.trim()) {
+      setSave({ kind: "error", msg: "Escreva a mensagem inicial." });
+      return;
+    }
     setSave({ kind: "saving" });
     const payload: Record<string, unknown> = {
       name,
@@ -127,12 +132,8 @@ export default function AutomationForm({
       // Escopo de post e resposta pública só valem para gatilhos de comentário.
       post_id: isComment && scope === "specific" ? postId || null : null,
       bind_next: isComment && scope === "next",
-      reply_message: replyMessage,
       public_reply: isComment ? publicReply || null : null,
-      buttons: cleanButtons.length ? cleanButtons : null,
-      flow: cleanFlow.length ? cleanFlow : null,
-      link_url: null,
-      link_label: null,
+      graph: buildGraph(cleanButtons),
     };
     if (!isEdit) payload.account_id = accountId;
 
@@ -180,14 +181,20 @@ export default function AutomationForm({
         <div className="mb-8">
           <label className={labelCls}>Fluxo da automação</label>
           <FlowCanvas
-            messages={[replyMessage, ...extraMessages]}
+            messages={initialEditor.messages}
             triggerLabel={
               showKeyword && keyword
                 ? `${TRIGGER_SHORT[trigger]}: "${keyword}"`
                 : TRIGGER_SHORT[trigger]
             }
-            onMessagesChange={handleMessagesChange}
+            onMessagesChange={setMessages}
           />
+          {hasBranches && (
+            <p className="mt-2 text-xs text-amber-400">
+              Este fluxo tem condições criadas fora do editor. O canvas mostra só o
+              caminho principal — salvar por aqui substitui os ramos.
+            </p>
+          )}
         </div>
 
         <div className="grid gap-10 md:grid-cols-2">
@@ -407,12 +414,7 @@ export default function AutomationForm({
             <p className="mono mb-3 text-center text-xs uppercase tracking-[0.25em] text-[var(--muted)]">
               Preview da DM
             </p>
-            <DmPreview
-              username="sua_conta"
-              text={replyMessage}
-              buttons={buttons}
-              extraMessages={extraMessages}
-            />
+            <DmPreview username="sua_conta" graph={previewGraph} />
           </div>
         </div>
       </div>

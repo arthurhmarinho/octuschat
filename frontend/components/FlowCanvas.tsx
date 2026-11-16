@@ -16,16 +16,20 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Plus, X, Zap, GripVertical } from "lucide-react";
+import { newNodeId, type EditorMessage } from "@/lib/flowGraph";
 
 /** Máximo de mensagens no flow: mensagem 1 + 5 seguintes. */
 const MAX_MESSAGES = 6;
 
-/** Mensagem com id estável — o id viaja com a mensagem ao reordenar (drag), o
- * que preserva o texto/foco do textarea (uncontrolled) mesmo mudando de posição. */
+/** Mensagem com id estável (o id do nó no grafo) — viaja com a mensagem ao
+ * reordenar (drag), o que preserva o texto/foco do textarea (uncontrolled)
+ * mesmo mudando de posição. */
 type Msg = { key: string; text: string };
-const uid = () => Math.random().toString(36).slice(2, 9);
-const toMsgs = (texts: string[]): Msg[] =>
-  (texts.length ? texts : [""]).map((t) => ({ key: uid(), text: t }));
+const toMsgs = (messages: EditorMessage[]): Msg[] =>
+  (messages.length ? messages : [{ id: newNodeId(), text: "" }]).map((m) => ({
+    key: m.id,
+    text: m.text,
+  }));
 
 const TRIGGER_H = 66;
 const MSG_H = 128;
@@ -98,12 +102,12 @@ export default function FlowCanvas({
   triggerLabel,
   onMessagesChange,
 }: {
-  messages: string[];
+  messages: EditorMessage[];
   triggerLabel: string;
-  onMessagesChange: (messages: string[]) => void;
+  onMessagesChange: (messages: EditorMessage[]) => void;
 }) {
   // Fonte de verdade interna (com ids estáveis). Inicializada uma vez; mudanças
-  // são empurradas para o pai como string[].
+  // são empurradas para o pai como EditorMessage[] (id do nó + texto).
   const msgsRef = useRef<Msg[]>(toMsgs(messages));
 
   // Callbacks estáveis usados pelos nós.
@@ -111,7 +115,7 @@ export default function FlowCanvas({
   const onDeleteRef = useRef<(key: string) => void>(() => {});
 
   const emit = useCallback(
-    () => onMessagesChange(msgsRef.current.map((m) => m.text)),
+    () => onMessagesChange(msgsRef.current.map((m) => ({ id: m.key, text: m.text }))),
     [onMessagesChange]
   );
 
@@ -201,14 +205,14 @@ export default function FlowCanvas({
   };
   onDeleteRef.current = (key: string) => {
     const next = msgsRef.current.filter((x) => x.key !== key);
-    msgsRef.current = next.length ? next : toMsgs([""]);
+    msgsRef.current = next.length ? next : toMsgs([]);
     emit();
     rebuild();
   };
 
   const onAdd = useCallback(() => {
     if (msgsRef.current.length >= MAX_MESSAGES) return;
-    msgsRef.current = [...msgsRef.current, { key: uid(), text: "" }];
+    msgsRef.current = [...msgsRef.current, { key: newNodeId(), text: "" }];
     emit();
     rebuild();
   }, [emit, rebuild]);

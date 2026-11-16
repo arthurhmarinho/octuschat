@@ -1,8 +1,8 @@
 """Tradução do corpo do webhook da Meta em eventos de fila, e o despacho deles.
 
 - `extract_events` é PURA: corpo do webhook → linhas para `webhook_events`.
-- `dispatch` chama o engine com exatamente os mesmos argumentos que o
-  endpoint usava antes da fila (o comportamento das automações não muda).
+- `dispatch` chama o engine com os dados do evento e o limitador de envios
+  do worker.
 """
 
 import hashlib
@@ -12,6 +12,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.automation_engine import process_comment, process_inbound_message
+from app.services.send_limiter import SendLimiter
 
 logger = logging.getLogger("inboxpilot.webhook_events")
 
@@ -72,8 +73,18 @@ def extract_events(body: dict) -> list[dict]:
     return events
 
 
-async def dispatch(db: AsyncSession, kind: str, account_id: str, payload: dict) -> None:
-    """Executa um evento da fila no engine de automações."""
+async def dispatch(
+    db: AsyncSession,
+    kind: str,
+    account_id: str,
+    payload: dict,
+    limiter: SendLimiter | None = None,
+) -> None:
+    """Executa um evento da fila no engine de automações.
+
+    Pode levantar `SendDeferred` (antes de enviar qualquer coisa) se o
+    limitador mandar esperar.
+    """
     if kind == COMMENT:
         value = payload.get("value") or {}
         await process_comment(
@@ -84,6 +95,7 @@ async def dispatch(db: AsyncSession, kind: str, account_id: str, payload: dict) 
             post_id=(value.get("media") or {}).get("id"),
             from_user=(value.get("from") or {}).get("id"),
             from_username=(value.get("from") or {}).get("username"),
+            limiter=limiter,
         )
     elif kind == MESSAGE:
         event = payload.get("event") or {}
@@ -96,6 +108,7 @@ async def dispatch(db: AsyncSession, kind: str, account_id: str, payload: dict) 
             mid=message.get("mid"),
             reply_to=message.get("reply_to"),
             attachments=message.get("attachments"),
+            limiter=limiter,
         )
     else:
         logger.warning("Evento de tipo desconhecido na fila: %s (ignorado)", kind)

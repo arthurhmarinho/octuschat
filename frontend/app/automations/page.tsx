@@ -12,7 +12,6 @@ type Automation = {
   name: string;
   trigger: Trigger;
   keyword: string | null;
-  reply_message: string;
   enabled: boolean;
 };
 

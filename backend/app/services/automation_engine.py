@@ -1,10 +1,19 @@
-"""Motor de automação: avalia um comentário e dispara as respostas.
+"""Motor de automação: evento → automação que casa → execução do grafo.
 
-Concentra a lógica de negócio que liga 'evento de comentário' →
-'automações que casam' → 'envio de DM', com idempotência via MessageLog.
+Todos os gatilhos (comentário, DM, story) executam o grafo da automação por
+um único caminho (`_plan` + `_run_graph`):
+
+1. o grafo é resolvido por `flow_runner.plan_steps` (função pura);
+2. o limitador da conta recebe o número de envios previstos — se mandar
+   esperar, nada é enviado e o evento volta para a fila (`SendDeferred`);
+3. o 1º envio de um comentário é a private reply; os demais saem pela Send
+   API via `messenger.send_dm`, que exige a janela de 24h aberta.
+
+Idempotência: `message_logs` (um registro por comentário/mid).
 """
 
 import logging
+from dataclasses import dataclass
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,8 +22,8 @@ from app.core.security import redact_secrets
 from app.models.account import InstagramAccount
 from app.models.contact import Contact
 from app.models.message_log import MessageLog
-from app.services import flow_runner, instagram_api, token_service
-from app.services.instagram_api import reply_privately_to_comment
+from app.services import flow_runner, instagram_api, messenger, token_service
+from app.services.send_limiter import NoLimit, SendDeferred, SendLimiter
 
 logger = logging.getLogger("inboxpilot.engine")
 
@@ -39,58 +48,100 @@ async def _enrich_contact(
         logger.info("Sem perfil enriquecido p/ %s: %s", contact.ig_user_id, exc)
 
 
-def compose_message(
-    text: str, link_url: str | None, link_label: str | None
-) -> str:
-    """Monta o corpo da DM a partir de texto + link opcional.
-
-    A private reply da Meta envia apenas texto, então embutimos a URL no
-    final. O frontend espelha esta mesma lógica no preview ao vivo.
-    """
-    if not link_url:
-        return text
-    if link_label:
-        return f"{text}\n\n👉 {link_label}: {link_url}"
-    return f"{text}\n\n{link_url}"
-
-
 def _store_body(text: str, buttons: list | None) -> str:
     """Texto como fica gravado na conversa (anexa botões de forma legível)."""
     stored = text
     if buttons:
-        stored += "\n\n" + "\n".join(f"[{b['label']}] → {b['url']}" for b in buttons)
+        stored += "\n\n" + "\n".join(
+            f"[{b['label']}] → {b['url']}" for b in buttons if b.get("url")
+        )
     return stored
 
 
-async def _send_followups(
+@dataclass
+class RunResult:
+    first_sent: bool = False
+    error: str | None = None
+    sent: int = 0
+
+
+async def _plan(
+    limiter: SendLimiter,
+    account_id: str,
+    graph: dict,
+    context: dict,
+    *,
+    private_reply: bool,
+    window_open: bool,
+) -> list[dict]:
+    """Planeja os envios e reserva no limitador ANTES de qualquer efeito.
+
+    Levanta SendDeferred se o limitador mandar esperar.
+    """
+    steps = flow_runner.plan_steps(graph, context)
+    if private_reply and not window_open:
+        planned = min(len(steps), 1)  # sem janela, só a private reply sai
+    else:
+        planned = len(steps)
+    if planned:
+        delay = await limiter.reserve(
+            account_id, sends=planned, private_replies=1 if private_reply else 0
+        )
+        if delay:
+            raise SendDeferred(delay)
+    return steps
+
+
+async def _run_graph(
     db: AsyncSession,
     account: InstagramAccount,
     auto,
-    contact: Contact,
-    recipient_id: str,
-    source: str,
+    steps: list[dict],
     token: str,
-    context: dict | None = None,
-) -> None:
-    """Executa o flow (mensagens 2..N) percorrendo o grafo e enviando em ordem.
+    *,
+    contact: Contact | None,
+    source: str,
+    comment_id: str | None = None,
+) -> RunResult:
+    """Envia os passos planejados, em ordem, e grava cada um na conversa.
 
-    O grafo é resolvido por ``flow_runner.plan_steps`` (nós de mensagem e de
-    condição). A janela de 24h já está aberta pela mensagem 1, então todos os
-    passos usam ``send_message_to_user``. Se um passo falha, interrompe.
+    Com `comment_id`, o 1º passo vai como private reply (com fallback para
+    texto + links). Os demais exigem contato e janela de 24h; fora da janela,
+    o flow para (com estado de execução, passará a esperar a resposta).
     """
-    for step in flow_runner.plan_steps(auto.flow, context):
-        text = step["text"]
-        buttons = step["buttons"]
+    result = RunResult()
+    for i, step in enumerate(steps):
+        text, buttons = step["text"], step["buttons"]
+        body = _store_body(text, buttons)
         try:
-            await instagram_api.send_message_to_user(
-                account.ig_user_id, recipient_id, text, token, buttons
-            )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Falha em passo do flow de '%s': %s", auto.name, exc)
+            if i == 0 and comment_id:
+                sent_text = await messenger.send_private_reply(
+                    account.ig_user_id, comment_id, text, buttons, token
+                )
+                if sent_text != text:  # caiu no fallback (links embutidos)
+                    body = sent_text
+            else:
+                if contact is None:
+                    break
+                await messenger.send_dm(account.ig_user_id, contact, text, buttons, token)
+        except messenger.OutsideWindow as exc:
+            logger.info("Flow de '%s' parou no passo %s: %s", auto.name, i + 1, exc)
             break
-        await crud.message.create(
-            db, account.ig_user_id, contact.id, "out", _store_body(text, buttons), source
-        )
+        except Exception as exc:  # noqa: BLE001
+            if i == 0:
+                result.error = redact_secrets(str(exc))
+                logger.exception("Falha ao enviar a mensagem 1 de '%s': %s", auto.name, exc)
+            else:
+                logger.warning("Falha no passo %s do flow de '%s': %s", i + 1, auto.name, exc)
+            break
+        if i == 0:
+            result.first_sent = True
+        result.sent += 1
+        if contact is not None:
+            await crud.message.create(
+                db, account.ig_user_id, contact.id, "out", body, source
+            )
+    return result
 
 
 async def process_comment(
@@ -101,8 +152,10 @@ async def process_comment(
     post_id: str | None,
     from_user: str | None,
     from_username: str | None = None,
+    limiter: SendLimiter | None = None,
 ) -> None:
     """Processa um comentário recebido via webhook."""
+    limiter = limiter or NoLimit()
     # Idempotência: se já respondemos este comentário, ignora.
     if await crud.message_log.exists_for_comment(db, comment_id):
         logger.info("Comentário %s já processado, ignorando.", comment_id)
@@ -127,48 +180,28 @@ async def process_comment(
 
     # Dispara a primeira automação que casou (1 resposta privada por comentário).
     auto = matches[0]
-    buttons = auto.buttons or None
-    # Com botões, o texto é a mensagem crua (o link vira botão); sem botões,
-    # embutimos o link no texto (compat com automações antigas).
-    body = auto.reply_message if buttons else compose_message(
-        auto.reply_message, auto.link_url, auto.link_label
+    existing = await crud.contact.find(db, account_id, from_user) if from_user else None
+    context = {"text": text, "is_new_contact": existing is None}
+    steps = await _plan(
+        limiter, account_id, auto.graph, context,
+        private_reply=True,
+        window_open=existing is not None and messenger.window_open(existing),
     )
-    log = MessageLog(
-        automation_id=auto.id,
-        comment_id=comment_id,
-        recipient_id=from_user,
-        status="sent",
+    if not steps:
+        logger.warning("Automação '%s' sem mensagens para enviar.", auto.name)
+        return
+
+    contact = None
+    if from_user:
+        contact = await crud.contact.upsert(db, account_id, from_user, username=from_username)
+        await _enrich_contact(db, account, contact, token)
+
+    result = await _run_graph(
+        db, account, auto, steps, token,
+        contact=contact, source="comment_reply", comment_id=comment_id,
     )
-    try:
-        # Tenta a private reply já com os botões (1 mensagem).
-        await reply_privately_to_comment(
-            ig_user_id=account.ig_user_id,
-            comment_id=comment_id,
-            text=body,
-            access_token=token,
-            buttons=buttons,
-        )
+    if result.first_sent:
         logger.info("Automação '%s' disparada para %s.", auto.name, from_user)
-    except Exception as exc:  # noqa: BLE001
-        # Fallback: se o template foi recusado na private reply, garante o texto
-        # e manda os botões como mensagem regular (a janela de 24h está aberta).
-        logger.warning("Private reply com botões falhou (%s); tentando fallback.", exc)
-        try:
-            await reply_privately_to_comment(
-                ig_user_id=account.ig_user_id,
-                comment_id=comment_id,
-                text=body,
-                access_token=token,
-            )
-            if buttons and from_user:
-                await instagram_api.send_message_to_user(
-                    account.ig_user_id, from_user, body, token, buttons
-                )
-            logger.info("Fallback OK para '%s'.", auto.name)
-        except Exception as exc2:  # noqa: BLE001
-            log.status = "failed"
-            log.error = redact_secrets(str(exc2))
-            logger.exception("Falha ao enviar (mesmo no fallback): %s", exc2)
 
     # Resposta PÚBLICA opcional no comentário (best-effort, não bloqueia a DM).
     if auto.public_reply:
@@ -180,31 +213,16 @@ async def process_comment(
         except Exception as exc:  # noqa: BLE001
             logger.warning("Falha na resposta pública: %s", exc)
 
-    db.add(log)
+    db.add(
+        MessageLog(
+            automation_id=auto.id,
+            comment_id=comment_id,
+            recipient_id=from_user,
+            status="sent" if result.first_sent else "failed",
+            error=result.error,
+        )
+    )
     await db.commit()
-
-    # Registra contato + mensagem de saída (alimenta Conversas/Contatos).
-    if log.status == "sent" and from_user:
-        # Antes do upsert: saber se é a 1ª interação (condição do flow).
-        is_new_contact = not await crud.contact.exists(db, account_id, from_user)
-        contact = await crud.contact.upsert(
-            db, account_id, from_user, username=from_username
-        )
-        await _enrich_contact(db, account, contact, token)
-        await crud.message.create(
-            db, account_id, contact.id, "out", _store_body(body, buttons), "comment_reply"
-        )
-        # Flow (mensagens 2..N, com condições) — Fase 3.
-        await _send_followups(
-            db,
-            account,
-            auto,
-            contact,
-            from_user,
-            "comment_reply",
-            token,
-            {"text": text, "is_new_contact": is_new_contact},
-        )
 
 
 async def process_inbound_message(
@@ -215,6 +233,7 @@ async def process_inbound_message(
     mid: str | None = None,
     reply_to: dict | None = None,
     attachments: list | None = None,
+    limiter: SendLimiter | None = None,
 ) -> None:
     """Registra a mensagem recebida e, se casar um gatilho, responde.
 
@@ -223,6 +242,7 @@ async def process_inbound_message(
     - ``reply_to.story`` → resposta a um story (keyword opcional);
     - caso contrário → DM comum.
     """
+    limiter = limiter or NoLimit()
     if not sender_id:
         return
     attachments = attachments or []
@@ -251,61 +271,47 @@ async def process_inbound_message(
     # Menção sem texto: registra um marcador legível na conversa.
     inbound_text = text or "📸 Mencionou você em um story"
 
-    # Antes do upsert: saber se é a 1ª interação (condição do flow).
-    is_new_contact = not await crud.contact.exists(db, account_id, sender_id)
-    contact = await crud.contact.upsert(db, account_id, sender_id)
+    # Decide (sem efeitos) se algo vai disparar — o limitador pode adiar o
+    # evento, e aí ele é reprocessado do zero.
+    already = bool(mid) and await crud.message_log.exists_for_comment(db, mid)
+    auto, steps = None, []
+    if not already:
+        if is_story_mention:
+            matches = await crud.automation.find_matching_story_mention(db, account_id)
+        elif is_story_reply:
+            matches = await crud.automation.find_matching_story(db, account_id, text)
+        else:
+            matches = await crud.automation.find_matching_dm(db, account_id, text)
+        if matches:
+            auto = matches[0]
+            is_new = not await crud.contact.exists(db, account_id, sender_id)
+            # A mensagem que acabou de chegar abre a janela de 24h.
+            steps = await _plan(
+                limiter, account_id, auto.graph,
+                {"text": text, "is_new_contact": is_new},
+                private_reply=False, window_open=True,
+            )
+
+    contact = await crud.contact.upsert(db, account_id, sender_id, inbound=True)
     await _enrich_contact(db, account, contact, token_service.read_token(account))
     await crud.message.create(db, account_id, contact.id, "in", inbound_text, source)
     logger.info("%s recebida de %s registrada.", kind, sender_id)
 
-    # Gatilhos: cada tipo tem seu matcher.
-    if mid and await crud.message_log.exists_for_comment(db, mid):
-        return  # idempotência: já respondemos esta mensagem
-    if is_story_mention:
-        matches = await crud.automation.find_matching_story_mention(db, account_id)
-    elif is_story_reply:
-        matches = await crud.automation.find_matching_story(db, account_id, text)
-    else:
-        matches = await crud.automation.find_matching_dm(db, account_id, text)
-    if not matches:
+    if auto is None or not steps:
         return
-
     token = await token_service.get_valid_token(db, account)
-    auto = matches[0]
-    buttons = auto.buttons or None
-    body = auto.reply_message if buttons else compose_message(
-        auto.reply_message, auto.link_url, auto.link_label
+    result = await _run_graph(
+        db, account, auto, steps, token, contact=contact, source=source
     )
-    log = MessageLog(
-        automation_id=auto.id,
-        comment_id=mid or f"dm:{sender_id}:{contact.id}",
-        recipient_id=sender_id,
-        status="sent",
-    )
-    try:
-        await instagram_api.send_message_to_user(
-            account.ig_user_id, sender_id, body, token, buttons
-        )
+    if result.first_sent:
         logger.info("Automação de DM '%s' disparada para %s.", auto.name, sender_id)
-    except Exception as exc:  # noqa: BLE001
-        log.status = "failed"
-        log.error = redact_secrets(str(exc))
-        logger.exception("Falha ao responder DM: %s", exc)
-    db.add(log)
+    db.add(
+        MessageLog(
+            automation_id=auto.id,
+            comment_id=mid or f"dm:{sender_id}:{contact.id}",
+            recipient_id=sender_id,
+            status="sent" if result.first_sent else "failed",
+            error=result.error,
+        )
+    )
     await db.commit()
-
-    if log.status == "sent":
-        await crud.message.create(
-            db, account_id, contact.id, "out", _store_body(body, buttons), source
-        )
-        # Flow (mensagens 2..N, com condições) — Fase 3.
-        await _send_followups(
-            db,
-            account,
-            auto,
-            contact,
-            sender_id,
-            source,
-            token,
-            {"text": text, "is_new_contact": is_new_contact},
-        )

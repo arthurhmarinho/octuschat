@@ -1,23 +1,18 @@
-"""Execução do flow como grafo (Fase 3).
+"""Execução do grafo da automação (Fase 3).
 
-O `flow` de uma automação representa os passos que vêm **depois da mensagem 1**
-(`reply_message`, que segue o caminho já testado das Fases 1/2). Aqui ele é
-percorrido como um grafo tipado:
+O grafo é a fonte única do conteúdo (ver schemas/automation.py):
 
-    {"nodes": [{"id","type","text","buttons","mode","value"}],
-     "edges": [{"source","target","branch"}],
-     "start": "<id>"}
+    {"version": 2, "start": "m1",
+     "nodes": [{"id","type","text","buttons","mode","value"}],
+     "edges": [{"source","target","branch"}]}
 
-Tipos de nó:
+`start` é a mensagem 1. Tipos de nó:
 - ``message``   → envia uma mensagem; segue pela aresta sem `branch`.
 - ``condition`` → avalia contra o contexto do gatilho e segue pela aresta
                   `branch: "yes"` ou `"no"`.
 
-Retrocompatível: o formato antigo (lista de `{text, buttons}`) é convertido
-numa cadeia linear de nós de mensagem.
-
-`plan_steps` é **puro** (sem I/O): recebe o flow + contexto e devolve a lista
-ordenada de mensagens a enviar — o envio fica no automation_engine.
+`plan_steps` é **puro** (sem I/O): recebe o grafo + contexto e devolve a
+lista ordenada de mensagens a enviar — o envio fica no automation_engine.
 """
 
 import logging
@@ -28,36 +23,13 @@ logger = logging.getLogger("inboxpilot.flow")
 MAX_STEPS = 20
 
 
-def normalize_flow(flow) -> dict:
-    """Converte o flow armazenado para o formato de grafo.
-
-    Aceita ``None``, a lista legada ``[{text, buttons}]`` ou o grafo.
-    """
-    if not flow:
-        return {"nodes": [], "edges": [], "start": None}
-
-    if isinstance(flow, dict):
-        nodes = flow.get("nodes") or []
-        edges = flow.get("edges") or []
-        start = flow.get("start") or (nodes[0].get("id") if nodes else None)
-        return {"nodes": nodes, "edges": edges, "start": start}
-
-    # Lista legada → cadeia linear de mensagens.
-    nodes: list[dict] = []
-    edges: list[dict] = []
-    for i, step in enumerate(flow):
-        node_id = f"s{i}"
-        nodes.append(
-            {
-                "id": node_id,
-                "type": "message",
-                "text": (step or {}).get("text") or "",
-                "buttons": (step or {}).get("buttons") or None,
-            }
-        )
-        if i:
-            edges.append({"source": f"s{i - 1}", "target": node_id})
-    return {"nodes": nodes, "edges": edges, "start": nodes[0]["id"] if nodes else None}
+def normalize_graph(graph) -> dict:
+    """Garante as chaves do grafo (tolerante a dados incompletos)."""
+    graph = graph if isinstance(graph, dict) else {}
+    nodes = [n for n in (graph.get("nodes") or []) if isinstance(n, dict)]
+    edges = [e for e in (graph.get("edges") or []) if isinstance(e, dict)]
+    start = graph.get("start") or (nodes[0].get("id") if nodes else None)
+    return {"nodes": nodes, "edges": edges, "start": start}
 
 
 def evaluate_condition(node: dict, context: dict) -> bool:
@@ -91,13 +63,13 @@ def _next_id(graph: dict, node_id: str, branch: str | None = None) -> str | None
     return None
 
 
-def plan_steps(flow, context: dict | None = None) -> list[dict]:
+def plan_steps(graph, context: dict | None = None) -> list[dict]:
     """Percorre o grafo e devolve as mensagens a enviar, em ordem.
 
     Função pura: não envia nada, só decide o que enviar.
     """
     context = context or {}
-    graph = normalize_flow(flow)
+    graph = normalize_graph(graph)
     by_id = {n.get("id"): n for n in graph["nodes"] if n.get("id")}
 
     steps: list[dict] = []
@@ -115,7 +87,7 @@ def plan_steps(flow, context: dict | None = None) -> list[dict]:
             text = (node.get("text") or "").strip()
             buttons = node.get("buttons") or None
             if text or buttons:
-                steps.append({"text": text, "buttons": buttons})
+                steps.append({"node_id": current, "text": text, "buttons": buttons})
             current = _next_id(graph, current)
         elif node_type == "condition":
             branch = "yes" if evaluate_condition(node, context) else "no"

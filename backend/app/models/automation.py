@@ -52,17 +52,19 @@ class Automation(Base):
     bind_next: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # JSONB (não JSON) para casar com o schema de produção (colunas criadas à mão).
     baseline_media_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    reply_message: Mapped[str] = mapped_column(Text, nullable=False)
+    # Conteúdo da automação: UM grafo {version, start, nodes, edges}; a
+    # mensagem 1 é o nó `start`. Formato e validação em schemas/automation.py.
+    graph: Mapped[dict] = mapped_column(JSONB, nullable=False)
     # resposta PÚBLICA opcional no próprio comentário (ex.: "Enviei no seu direct 🚀")
+    # — configuração do gatilho de comentário, não um nó do grafo.
     public_reply: Mapped[str | None] = mapped_column(String(2048), nullable=True)
-    # Link opcional anexado à DM (compat; substituído por buttons).
+    # ── DEPRECADAS (migração 0004): substituídas por `graph`. Não são mais
+    # lidas nem escritas; ficam uma versão para facilitar rollback e serão
+    # removidas numa migração futura.
+    reply_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     link_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     link_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    # Botões de link na DM (até 3): lista de {"label": str, "url": str}.
     buttons: Mapped[list | None] = mapped_column(JSONB, nullable=True)
-    # Fase 3 — Flow multi-step. Passos ADICIONAIS enviados em sequência após a
-    # mensagem 1 (reply_message+buttons). Lista de {"text": str, "buttons": [...]}.
-    # None/[] = sem passos extras (comportamento das Fases 1/2).
     flow: Mapped[list | None] = mapped_column(JSON, nullable=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(

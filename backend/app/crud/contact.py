@@ -15,8 +15,13 @@ async def upsert(
     username: str | None = None,
     profile_pic: str | None = None,
     touch: bool = True,
+    inbound: bool = False,
 ) -> Contact:
-    """Cria o contato se não existir; atualiza username/foto/last_message_at."""
+    """Cria o contato se não existir; atualiza username/foto/last_message_at.
+
+    `inbound=True` (mensagem recebida por DM) também atualiza
+    `last_inbound_at`, base da janela de 24h.
+    """
     result = await db.execute(
         select(Contact).where(
             Contact.account_id == account_id, Contact.ig_user_id == ig_user_id
@@ -30,8 +35,11 @@ async def upsert(
         contact.username = username
     if profile_pic:
         contact.profile_pic = profile_pic
+    now = datetime.now(timezone.utc)
     if touch:
-        contact.last_message_at = datetime.now(timezone.utc)
+        contact.last_message_at = now
+    if inbound:
+        contact.last_inbound_at = now
     await db.commit()
     await db.refresh(contact)
     return contact
@@ -46,6 +54,16 @@ async def exists(db: AsyncSession, account_id: str, ig_user_id: str) -> bool:
         )
     )
     return result.scalar_one_or_none() is not None
+
+
+async def find(db: AsyncSession, account_id: str, ig_user_id: str) -> Contact | None:
+    """Contato pelo IGSID, sem criar."""
+    result = await db.execute(
+        select(Contact).where(
+            Contact.account_id == account_id, Contact.ig_user_id == ig_user_id
+        )
+    )
+    return result.scalar_one_or_none()
 
 
 async def get(db: AsyncSession, contact_id: int) -> Contact | None:

@@ -25,6 +25,7 @@ from app.core.config import settings
 from app.core.database import Base, get_session
 from app.models.webhook_event import DONE, FAILED, PENDING, PROCESSING, WebhookEvent
 from app.workers import webhook_worker as worker_mod
+from app.services.send_limiter import SendDeferred
 from app.workers.webhook_worker import MAX_ATTEMPTS, WebhookWorker
 
 TEST_DB = os.environ.get("TEST_DATABASE_URL")
@@ -61,7 +62,7 @@ def dispatch_calls(monkeypatch):
     """Substitui o engine: registra chamadas; falha se payload pedir."""
     calls = []
 
-    async def fake_dispatch(db, kind, account_id, payload):
+    async def fake_dispatch(db, kind, account_id, payload, limiter=None):
         calls.append((kind, account_id, payload))
         if payload.get("boom"):
             raise RuntimeError("falha simulada access_token=IGAAsegredo123")
@@ -157,18 +158,28 @@ async def test_esgota_tentativas_e_vira_failed(sessions, dispatch_calls):
     assert len(dispatch_calls) == MAX_ATTEMPTS
 
 
-async def test_limitador_adia_sem_contar_tentativa(sessions, dispatch_calls):
+async def test_limitador_adia_sem_contar_tentativa(sessions, monkeypatch):
     class Limita:
-        async def reserve(self, account_id):
+        async def reserve(self, account_id, sends=1, private_replies=0):
             return 60.0
 
+    async def fake_dispatch(db, kind, account_id, payload, limiter=None):
+        # O engine reserva os envios previstos e levanta SendDeferred.
+        delay = await limiter.reserve(account_id, sends=3)
+        raise SendDeferred(delay)
+
+    monkeypatch.setattr(worker_mod, "dispatch", fake_dispatch)
     async with sessions() as db:
         await crud.webhook_event.enqueue(db, [ev("x")])
     w = WebhookWorker(session_factory=sessions, limiter=Limita())
     await w.run_once()
     [row] = await all_events(sessions)
-    assert row.status == PENDING and row.attempts == 0
-    assert dispatch_calls == []
+    assert row.status == PENDING and row.attempts == 0 and row.last_error is None
+    async with sessions() as db:
+        adiado = (await db.execute(
+            text("SELECT available_at > now() + interval '50 seconds' FROM webhook_events")
+        )).scalar()
+    assert adiado
 
 
 async def test_eventos_presos_voltam_para_fila(sessions):

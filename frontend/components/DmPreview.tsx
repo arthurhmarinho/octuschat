@@ -2,24 +2,44 @@
 
 import { Instagram, ChevronLeft, Wifi, BatteryFull, SignalHigh, Camera } from "lucide-react";
 
-type Button = { label: string; url: string };
+import { linearMessages, type FlowGraph, type GraphButton } from "@/lib/flowGraph";
+
 type Props = {
   username: string;
-  text: string;
-  linkUrl?: string;
-  linkLabel?: string;
-  buttons?: Button[];
-  extraMessages?: string[];
+  graph: FlowGraph;
 };
+
+const bubble =
+  "max-w-[82%] whitespace-pre-wrap break-words rounded-2xl rounded-tl-md bg-neutral-800 px-3 py-2 text-sm text-white";
+
+/** Botões (button template) empilhados. */
+function Buttons({ buttons }: { buttons: GraphButton[] }) {
+  return (
+    <div className="max-w-[82%] overflow-hidden rounded-2xl border border-neutral-700 bg-neutral-900">
+      {buttons.slice(0, 3).map((b, i) => (
+        <div
+          key={b.id ?? i}
+          className={`px-3 py-2.5 text-center text-sm font-medium text-blue-400 ${
+            i > 0 ? "border-t border-neutral-700" : ""
+          }`}
+        >
+          {b.label.trim() || "Botão"}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 /**
  * Preview ao vivo da DM, renderizado dentro de uma moldura de iPhone
  * (dynamic island + status bar + header do Instagram + barra de digitar).
+ * Mostra as mensagens do caminho padrão do grafo, a partir do início.
  */
-export default function DmPreview({ username, text, linkUrl, linkLabel, buttons, extraMessages }: Props) {
-  const validButtons = (buttons ?? []).filter((b) => b.label.trim() || b.url.trim());
-  const validExtras = (extraMessages ?? []).map((m) => m.trim()).filter(Boolean);
+export default function DmPreview({ username, graph }: Props) {
   const handle = username || "sua_conta";
+  const [first, ...rest] = linearMessages(graph);
+  const text = first?.text ?? "";
+  const validButtons = (first?.buttons ?? []).filter((b) => b.label.trim() || b.url.trim());
 
   return (
     <div className="mx-auto w-[290px] select-none">
@@ -54,59 +74,27 @@ export default function DmPreview({ username, text, linkUrl, linkLabel, buttons,
           {/* Mensagens */}
           <div className="min-h-[210px] space-y-2 px-3 py-4">
             {text.trim() ? (
-              <div className="max-w-[82%] whitespace-pre-wrap break-words rounded-2xl rounded-tl-md bg-neutral-800 px-3 py-2 text-sm text-white">
-                {text}
-              </div>
+              <div className={bubble}>{text}</div>
             ) : (
               <div className="max-w-[82%] rounded-2xl rounded-tl-md bg-neutral-800/50 px-3 py-2 text-sm italic text-neutral-500">
                 Sua mensagem aparece aqui…
               </div>
             )}
 
-            {/* Botões (button template) empilhados */}
-            {validButtons.length > 0 ? (
-              <div className="max-w-[82%] overflow-hidden rounded-2xl border border-neutral-700 bg-neutral-900">
-                {validButtons.slice(0, 3).map((b, i) => (
-                  <div
-                    key={i}
-                    className={`px-3 py-2.5 text-center text-sm font-medium text-blue-400 ${
-                      i > 0 ? "border-t border-neutral-700" : ""
-                    }`}
-                  >
-                    {b.label.trim() || "Botão"}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              linkUrl && (
-                <a
-                  href={linkUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block max-w-[82%] overflow-hidden rounded-2xl border border-neutral-700 bg-neutral-900"
-                >
-                  <div className="flex h-20 items-center justify-center bg-neutral-800 text-neutral-500">
-                    🔗
-                  </div>
-                  <div className="px-3 py-2">
-                    <p className="truncate text-sm font-medium text-blue-400">
-                      {linkLabel || "Abrir link"}
-                    </p>
-                    <p className="truncate text-xs text-neutral-500">{linkUrl}</p>
-                  </div>
-                </a>
-              )
-            )}
+            {validButtons.length > 0 && <Buttons buttons={validButtons} />}
 
             {/* Mensagens seguintes do flow, empilhadas */}
-            {validExtras.map((m, i) => (
-              <div
-                key={i}
-                className="max-w-[82%] whitespace-pre-wrap break-words rounded-2xl rounded-tl-md bg-neutral-800 px-3 py-2 text-sm text-white"
-              >
-                {m}
-              </div>
-            ))}
+            {rest.map((m) => {
+              const t = (m.text ?? "").trim();
+              const bts = (m.buttons ?? []).filter((b) => b.label.trim() || b.url.trim());
+              if (!t && !bts.length) return null;
+              return (
+                <div key={m.id} className="space-y-2">
+                  {t && <div className={bubble}>{t}</div>}
+                  {bts.length > 0 && <Buttons buttons={bts} />}
+                </div>
+              );
+            })}
           </div>
 
           {/* Barra de digitar */}

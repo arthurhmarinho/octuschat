@@ -11,7 +11,9 @@ async def main():
         try:
             def mk(**kw):
                 base = dict(name=kw.pop("name"), trigger=kw.pop("trigger"),
-                           reply_message="resposta", account_id=ACC)
+                           account_id=ACC,
+                           graph={"version": 2, "start": "m1", "edges": [],
+                                  "nodes": [{"id": "m1", "type": "message", "text": "resposta"}]})
                 base.update(kw)
                 return AutomationCreate(**base)
 

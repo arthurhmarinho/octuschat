@@ -1,11 +1,11 @@
-"""Testes do flow_runner.plan_steps (função pura: flow + contexto → mensagens)."""
+"""Testes do flow_runner.plan_steps (função pura: grafo + contexto → mensagens)."""
 
 import logging
 
 import pytest
 
 from app.services import flow_runner
-from app.services.flow_runner import MAX_STEPS, normalize_flow, plan_steps
+from app.services.flow_runner import MAX_STEPS, normalize_graph, plan_steps
 
 BTN = [{"label": "Abrir", "url": "https://exemplo.com"}]
 
@@ -29,42 +29,51 @@ def edge(source: str, target: str, branch: str | None = None) -> dict:
     return e
 
 
-# ── Flow vazio ──────────────────────────────────────────────
+def chain(*steps) -> dict:
+    """Grafo linear: cada item é um texto ou um nó de mensagem pronto."""
+    nodes = [
+        s if isinstance(s, dict) else msg(f"s{i}", s) for i, s in enumerate(steps)
+    ]
+    edges = [edge(nodes[i - 1]["id"], nodes[i]["id"]) for i in range(1, len(nodes))]
+    return {"version": 2, "start": nodes[0]["id"] if nodes else None,
+            "nodes": nodes, "edges": edges}
 
 
-@pytest.mark.parametrize("flow", [None, [], {}, {"nodes": [], "edges": []}])
-def test_flow_vazio_nao_envia_nada(flow):
-    assert plan_steps(flow) == []
+# ── Grafo vazio / incompleto ────────────────────────────────
 
 
-# ── Formato legado (lista) ──────────────────────────────────
+@pytest.mark.parametrize("graph", [None, [], {}, {"nodes": [], "edges": []}])
+def test_grafo_vazio_nao_envia_nada(graph):
+    assert plan_steps(graph) == []
 
 
-def test_lista_legada_vira_cadeia_linear_em_ordem():
-    flow = [{"text": "um"}, {"text": "dois", "buttons": BTN}, {"text": "três"}]
-    steps = plan_steps(flow)
+def test_normalize_graph_tolera_lixo():
+    g = normalize_graph({"nodes": [None, msg("a", "x"), "lixo"], "edges": [1, edge("a", "b")]})
+    assert g == {"nodes": [msg("a", "x")], "edges": [edge("a", "b")], "start": "a"}
+
+
+# ── Cadeia linear ───────────────────────────────────────────
+
+
+def test_cadeia_em_ordem_com_botoes_e_node_id():
+    graph = chain("um", msg("d", "dois", BTN), "três")
+    steps = plan_steps(graph)
     assert texts(steps) == ["um", "dois", "três"]
+    assert [s["node_id"] for s in steps] == ["s0", "d", "s2"]
     assert steps[0]["buttons"] is None
     assert steps[1]["buttons"] == BTN
 
 
-def test_lista_legada_normaliza_para_grafo():
-    graph = normalize_flow([{"text": "a"}, {"text": "b"}])
-    assert graph["start"] == "s0"
-    assert [n["id"] for n in graph["nodes"]] == ["s0", "s1"]
-    assert graph["edges"] == [{"source": "s0", "target": "s1"}]
-
-
-def test_lista_legada_pula_passos_vazios_mas_segue_a_cadeia():
-    flow = [{"text": "um"}, {"text": "   "}, None, {"text": "", "buttons": BTN}, {"text": "fim"}]
-    steps = plan_steps(flow)
-    # vazio e None são pulados; só-botões é enviado (texto vazio + botões)
+def test_cadeia_pula_mensagens_vazias_mas_segue():
+    graph = chain("um", "   ", msg("b", "", BTN), "fim")
+    steps = plan_steps(graph)
+    # vazio é pulado; só-botões é enviado (texto vazio + botões)
     assert texts(steps) == ["um", "", "fim"]
     assert steps[1]["buttons"] == BTN
 
 
 def test_texto_e_aparado():
-    assert texts(plan_steps([{"text": "  oi  "}])) == ["oi"]
+    assert texts(plan_steps(chain("  oi  "))) == ["oi"]
 
 
 # ── Grafo ───────────────────────────────────────────────────
@@ -252,13 +261,13 @@ def test_auto_loop_em_condicao_termina_sem_enviar():
 
 
 def test_cadeia_maior_que_max_steps_e_truncada():
-    flow = [{"text": f"m{i}"} for i in range(MAX_STEPS + 5)]
+    flow = chain(*[f"m{i}" for i in range(MAX_STEPS + 5)])
     assert texts(plan_steps(flow)) == [f"m{i}" for i in range(MAX_STEPS)]
 
 
 def test_respeita_max_steps_alterado(monkeypatch):
     monkeypatch.setattr(flow_runner, "MAX_STEPS", 3)
-    assert len(plan_steps([{"text": str(i)} for i in range(10)])) == 3
+    assert len(plan_steps(chain(*[str(i) for i in range(10)]))) == 3
 
 
 # ── Pureza ──────────────────────────────────────────────────

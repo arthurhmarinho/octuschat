@@ -27,6 +27,12 @@ class Contact(Base):
     first_seen: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # Última interação (DM ou comentário) — ordena a lista de contatos.
     last_message_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Última mensagem RECEBIDA por DM (texto, story, postback, quick reply).
+    # Base da janela de 24h da Meta; comentário não conta.
+    last_inbound_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

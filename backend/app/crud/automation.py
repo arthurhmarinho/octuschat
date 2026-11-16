@@ -15,8 +15,14 @@ def _excluded(auto: Automation, lowered: str) -> bool:
 from app.schemas.automation import AutomationCreate, AutomationUpdate
 
 
+def _graph_json(graph) -> dict:
+    """Grafo validado → JSON gravado (sem campos nulos)."""
+    return graph.model_dump(exclude_none=True)
+
+
 async def create(db: AsyncSession, data: AutomationCreate) -> Automation:
-    automation = Automation(**data.model_dump())
+    fields = data.model_dump(exclude={"graph"})
+    automation = Automation(**fields, graph=_graph_json(data.graph))
     db.add(automation)
     await db.commit()
     await db.refresh(automation)
@@ -37,8 +43,10 @@ async def list_by_account(db: AsyncSession, account_id: str) -> list[Automation]
 async def update(
     db: AsyncSession, automation: Automation, data: AutomationUpdate
 ) -> Automation:
-    for field, value in data.model_dump(exclude_unset=True).items():
+    for field, value in data.model_dump(exclude_unset=True, exclude={"graph"}).items():
         setattr(automation, field, value)
+    if data.graph is not None:
+        automation.graph = _graph_json(data.graph)
     await db.commit()
     await db.refresh(automation)
     return automation

@@ -16,6 +16,10 @@ chega aqui como exceção é erro inesperado (banco, decifrar token…). Nesses
 casos o evento volta para a fila com backoff, até MAX_ATTEMPTS. Um evento que
 falhou no meio pode ter enviado parte do flow; a mensagem 1 tem idempotência
 (message_logs), os passos seguintes não — por isso poucas tentativas.
+
+Rate limit: o engine reserva no limitador os envios previstos do evento
+antes de enviar; se ele mandar esperar (`SendDeferred`), o evento volta à
+fila sem contar tentativa.
 """
 
 import asyncio
@@ -26,7 +30,7 @@ from datetime import timedelta
 from app.core.database import SessionLocal
 from app.core.security import redact_secrets
 from app.crud import webhook_event as queue
-from app.services.send_limiter import NoLimit, SendLimiter
+from app.services.send_limiter import NoLimit, SendDeferred, SendLimiter
 from app.services.webhook_events import dispatch
 
 logger = logging.getLogger("inboxpilot.worker")
@@ -104,17 +108,21 @@ class WebhookWorker:
         return len(events)
 
     async def _process(self, event) -> None:
-        delay = await self._limiter.reserve(event.account_id)
-        if delay:
-            async with self._session_factory() as db:
-                await queue.defer(db, event.id, timedelta(seconds=delay))
-            logger.info("Evento %s adiado %.0fs (limite da conta).", event.id, delay)
-            return
-
         started = time.monotonic()
         try:
             async with self._session_factory() as db:
-                await dispatch(db, event.kind, event.account_id, event.payload)
+                await dispatch(
+                    db, event.kind, event.account_id, event.payload, limiter=self._limiter
+                )
+        except SendDeferred as deferred:
+            # O engine reservou os envios previstos e o limitador mandou
+            # esperar — nada foi enviado. Volta à fila sem contar tentativa.
+            async with self._session_factory() as db:
+                await queue.defer(db, event.id, timedelta(seconds=deferred.delay))
+            logger.info(
+                "Evento %s adiado %.0fs (limite da conta).", event.id, deferred.delay
+            )
+            return
         except Exception as exc:  # noqa: BLE001
             error = redact_secrets(f"{type(exc).__name__}: {exc}")[:2000]
             async with self._session_factory() as db:

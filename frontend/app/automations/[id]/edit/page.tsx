@@ -16,12 +16,6 @@ export default function EditAutomationPage() {
     fetch(`/api/backend/automations/${id}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((a) => {
-        const buttons =
-          Array.isArray(a.buttons) && a.buttons.length
-            ? a.buttons
-            : a.link_url
-            ? [{ label: a.link_label || "Abrir", url: a.link_url }]
-            : [];
         setInitial({
           name: a.name ?? "",
           trigger: a.trigger,
@@ -29,12 +23,8 @@ export default function EditAutomationPage() {
           excludeKeywords: a.exclude_keywords ?? "",
           postId: a.post_id ?? "",
           scope: a.post_id ? "specific" : a.bind_next ? "next" : "all",
-          replyMessage: a.reply_message ?? "",
           publicReply: a.public_reply ?? "",
-          buttons,
-          extraMessages: Array.isArray(a.flow)
-            ? a.flow.map((s: { text?: string }) => s.text ?? "")
-            : [],
+          graph: a.graph ?? null,
         });
       })
       .catch(() => setError(true));
