@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     oauth_redirect_uri: str = "http://localhost:8000/instagram/callback"
     graph_api_version: str = "v21.0"
 
+    # ── Worker da fila de webhooks ───────────────────────
+    # true = roda como task no próprio servidor web (padrão).
+    # false = não roda aqui (ex.: se virar um processo/serviço separado).
+    webhook_worker_enabled: bool = True
+
     @property
     def is_production(self) -> bool:
         return self.environment.lower() == "production"

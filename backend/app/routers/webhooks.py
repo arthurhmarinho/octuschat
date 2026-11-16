@@ -1,15 +1,18 @@
-"""Webhooks da Meta para eventos do Instagram (comentários)."""
+"""Webhooks da Meta para eventos do Instagram (comentários e mensagens)."""
 
 import json
 import logging
+import time
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app import crud
 from app.core.config import settings
 from app.core.database import get_session
 from app.core.security import verify_meta_signature
-from app.services.automation_engine import process_comment, process_inbound_message
+from app.services.webhook_events import extract_events
+from app.workers import webhook_worker
 
 logger = logging.getLogger("inboxpilot.webhooks")
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -29,7 +32,13 @@ async def verify_webhook(
 
 @router.post("/instagram")
 async def receive_event(request: Request, db: AsyncSession = Depends(get_session)):
-    """Recebe notificações de eventos e dispara automações."""
+    """Recebe notificações da Meta: valida, enfileira e responde 200 na hora.
+
+    O processamento (automações, envio de DMs) acontece no worker
+    (`app/workers/webhook_worker.py`). Eventos repetidos são descartados pela
+    `dedupe_key`. Se não der para gravar, devolve 500 — e a Meta reenvia.
+    """
+    started = time.monotonic()
     raw = await request.body()
 
     # Segurança: valida a assinatura da Meta (X-Hub-Signature-256).
@@ -39,40 +48,19 @@ async def receive_event(request: Request, db: AsyncSession = Depends(get_session
             logger.warning("Assinatura do webhook inválida — rejeitado.")
             return Response(status_code=status.HTTP_403_FORBIDDEN)
 
-    body = json.loads(raw)
+    try:
+        body = json.loads(raw)
+    except ValueError:
+        logger.warning("Webhook com corpo que não é JSON — rejeitado.")
+        return Response(status_code=status.HTTP_400_BAD_REQUEST)
 
-    for entry in body.get("entry", []):
-        account_id = str(entry.get("id", ""))
-
-        # Comentários (campo "comments") → dispara automações.
-        for change in entry.get("changes", []):
-            if change.get("field") != "comments":
-                continue
-            value = change.get("value", {})
-            await process_comment(
-                db=db,
-                account_id=account_id,
-                comment_id=str(value.get("id", "")),
-                text=value.get("text", ""),
-                post_id=(value.get("media") or {}).get("id"),
-                from_user=(value.get("from") or {}).get("id"),
-                from_username=(value.get("from") or {}).get("username"),
-            )
-
-        # Mensagens recebidas (DMs) → registra na conversa.
-        for event in entry.get("messaging", []):
-            message = event.get("message") or {}
-            if message.get("is_echo"):
-                continue
-            await process_inbound_message(
-                db=db,
-                account_id=account_id,
-                sender_id=(event.get("sender") or {}).get("id", ""),
-                text=message.get("text", ""),
-                mid=message.get("mid"),
-                reply_to=message.get("reply_to"),
-                attachments=message.get("attachments"),
-            )
-
-    # A Meta espera 200 rápido.
+    events = extract_events(body if isinstance(body, dict) else {})
+    inserted = await crud.webhook_event.enqueue(db, events)
+    if inserted:
+        webhook_worker.notify()
+    logger.info(
+        "Webhook: %s evento(s), %s novo(s), %s duplicado(s) — %.0f ms.",
+        len(events), inserted, len(events) - inserted,
+        (time.monotonic() - started) * 1000,
+    )
     return {"status": "ok"}

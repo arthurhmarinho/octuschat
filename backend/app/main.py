@@ -1,5 +1,6 @@
 """Entrypoint do backend FastAPI do InboxPilot."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -16,6 +17,7 @@ from app.routers import (
     instagram,
     webhooks,
 )
+from app.workers.webhook_worker import worker as webhook_worker
 
 logging.basicConfig(level=logging.INFO)
 # O httpx loga cada URL em INFO — com query strings que podem ter segredos
@@ -33,7 +35,22 @@ async def lifespan(app: FastAPI):
         logger.error(
             "TOKEN_ENCRYPTION_KEYS ausente ou inválida — não dá para ler os tokens da Meta."
         )
-    yield
+
+    # Worker da fila de webhooks: task asyncio no mesmo processo.
+    worker_task = None
+    if settings.webhook_worker_enabled:
+        worker_task = asyncio.create_task(webhook_worker.run(), name="webhook-worker")
+    try:
+        yield
+    finally:
+        if worker_task is not None:
+            await webhook_worker.stop()
+            try:
+                # Termina o evento em andamento; se demorar, cancela (o evento
+                # fica em `processing` e volta à fila sozinho depois).
+                await asyncio.wait_for(worker_task, timeout=10)
+            except TimeoutError:
+                worker_task.cancel()
 
 
 app = FastAPI(
