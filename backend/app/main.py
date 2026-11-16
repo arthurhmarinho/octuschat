@@ -7,7 +7,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.core.database import init_db
 from app.routers import (
     automations,
     contacts,
@@ -23,8 +22,7 @@ logger = logging.getLogger("inboxpilot")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Em dev/demo criamos as tabelas no startup. Em produção, use Alembic.
-    await init_db()
+    # O schema é gerido pelo Alembic (`alembic upgrade head`), não no startup.
     if not settings.api_secret:
         logger.warning("API_SECRET vazio — todas as rotas protegidas vão responder 401.")
     yield

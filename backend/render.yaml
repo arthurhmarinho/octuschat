@@ -16,6 +16,9 @@ services:
         sync: false
       - key: DATABASE_URL
         sync: false
+      # Opcional: conexão do session pooler (porta 5432) só para as migrações.
+      - key: MIGRATIONS_DATABASE_URL
+        sync: false
       - key: META_APP_ID
         sync: false
       - key: META_APP_SECRET

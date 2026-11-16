@@ -4,6 +4,7 @@ import enum
 from datetime import datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -49,7 +50,8 @@ class Automation(Base):
     # "próxima publicação": enquanto post_id é None, aguarda o 1º post novo
     # (id fora de baseline_media_ids) para se vincular a ele.
     bind_next: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    baseline_media_ids: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # JSONB (não JSON) para casar com o schema de produção (colunas criadas à mão).
+    baseline_media_ids: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     reply_message: Mapped[str] = mapped_column(Text, nullable=False)
     # resposta PÚBLICA opcional no próprio comentário (ex.: "Enviei no seu direct 🚀")
     public_reply: Mapped[str | None] = mapped_column(String(2048), nullable=True)
@@ -57,7 +59,7 @@ class Automation(Base):
     link_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     link_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # Botões de link na DM (até 3): lista de {"label": str, "url": str}.
-    buttons: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    buttons: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # Fase 3 — Flow multi-step. Passos ADICIONAIS enviados em sequência após a
     # mensagem 1 (reply_message+buttons). Lista de {"text": str, "buttons": [...]}.
     # None/[] = sem passos extras (comportamento das Fases 1/2).

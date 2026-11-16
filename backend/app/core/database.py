@@ -46,12 +46,3 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """Dependency do FastAPI: fornece uma sessão por request."""
     async with SessionLocal() as session:
         yield session
-
-
-async def init_db() -> None:
-    """Cria as tabelas (dev/demo). Em produção, prefira migrações Alembic."""
-    # importa os modelos para registrá-los no metadata antes do create_all
-    from app import models  # noqa: F401
-
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)

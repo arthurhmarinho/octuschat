@@ -14,4 +14,7 @@ COPY . .
 ENV PORT=8000
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]
+# Aplica as migrações pendentes antes de subir (o plano free do Render não tem
+# pre-deploy command). Se a migração falhar, o container não sobe — e o
+# Postgres desfaz a migração inteira (DDL transacional).
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port ${PORT}"]

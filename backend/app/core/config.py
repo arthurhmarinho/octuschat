@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # Use a connection string do *pooler* do Supabase.
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/inboxpilot"
     db_echo: bool = False
+    # Opcional: URL usada só pelas migrações (Alembic). No Supabase, use a do
+    # *session pooler* (porta 5432) — DDL no transaction pooler é frágil.
+    migrations_database_url: str = ""
 
     # ── Meta / Instagram Graph API ───────────────────────
     meta_app_id: str = ""
