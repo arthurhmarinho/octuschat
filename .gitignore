@@ -57,6 +57,10 @@ pnpm-debug.log*
 #  Contexto interno do projeto (somente local)
 # ─────────────────────────────────────────────
 CONTEXTO_PROJETO.md
+ROADMAP.md
+
+# Configuração local do Claude Code
+.claude/
 
 # ─────────────────────────────────────────────
 #  Editores / SO
