@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core import crypto
 from app.core.config import settings
 from app.routers import (
+    auth,
     automations,
     contacts,
     conversations,
@@ -73,6 +74,7 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
+app.include_router(auth.router)
 app.include_router(webhooks.router)
 app.include_router(instagram.router)
 app.include_router(automations.router)
