@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Loader2 } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import { Note, Spinner } from "@/components/ui";
 import AutomationForm, { type AutomationInitial } from "@/components/AutomationForm";
 
 export default function EditAutomationPage() {
@@ -33,9 +33,9 @@ export default function EditAutomationPage() {
   if (error) {
     return (
       <AppShell title="Editar automação">
-        <div className="glass p-6 text-sm text-amber-400">
-          Não foi possível carregar esta automação.
-        </div>
+        <Note variant="warning">
+          Não foi possível carregar esta automação. Verifique a conexão e tente de novo
+        </Note>
       </AppShell>
     );
   }
@@ -43,8 +43,8 @@ export default function EditAutomationPage() {
   if (!initial) {
     return (
       <AppShell title="Editar automação">
-        <div className="flex items-center gap-2 text-sm text-[var(--muted)]">
-          <Loader2 size={16} className="animate-spin" /> Carregando…
+        <div className="flex justify-center py-24">
+          <Spinner />
         </div>
       </AppShell>
     );

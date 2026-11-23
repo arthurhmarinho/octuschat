@@ -5,6 +5,7 @@ import Link from "next/link";
 import { MessagesSquare, Workflow } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import Avatar from "@/components/Avatar";
+import ConnectNotice from "@/components/ConnectNotice";
 import {
   Button,
   Card,
@@ -125,6 +126,7 @@ export default function Home() {
   if (!accountId || !data) {
     return (
       <AppShell title="Início">
+        <ConnectNotice />
         <Card className="max-w-xl">
           <h2 className="text-[15px] font-medium text-fg">Conecte sua conta do Instagram</h2>
           <p className="mb-4 mt-1 text-sm text-fg-2">
@@ -145,6 +147,7 @@ export default function Home() {
 
   return (
     <AppShell title="Início">
+      <ConnectNotice />
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="Automações ativas" value={active} meta={`de ${automations.length}`} />
         <Stat label="Contatos" value={data.contacts} />

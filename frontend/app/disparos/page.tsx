@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Send, Info } from "lucide-react";
+import { Send } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import { Button, Card, Field, Note, Textarea } from "@/components/ui";
 import { useAccount } from "@/lib/account";
 
 export default function DisparosPage() {
@@ -24,46 +25,34 @@ export default function DisparosPage() {
 
   return (
     <AppShell title="Disparos">
-      <div className="mx-auto max-w-2xl">
-        <p className="mb-6 text-sm text-[var(--muted)]">
-          Envie uma mensagem para os seus contatos de uma vez (broadcast).
-        </p>
+      <div className="max-w-2xl space-y-4">
+        <p className="text-sm text-fg-2">Envie uma mensagem para vários contatos de uma vez</p>
 
-        <div className="glass space-y-4 p-6">
-          <div>
-            <label className="mono mb-1.5 block text-xs uppercase tracking-wide text-[var(--muted)]">
-              Mensagem
-            </label>
-            <textarea
-              className="min-h-[120px] w-full resize-y rounded-lg border border-[var(--border)] bg-black/30 px-3.5 py-2.5 text-sm outline-none focus:border-[var(--gold)]"
+        <Card className="space-y-4">
+          <Field label="Mensagem" htmlFor="broadcast">
+            <Textarea
+              id="broadcast"
+              rows={5}
               value={text}
               onChange={(e) => setText(e.target.value)}
-              placeholder="Escreva o disparo…"
+              placeholder="Escreva o disparo"
             />
-          </div>
+          </Field>
 
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-[var(--muted)]">
-              {count === null ? "…" : count} destinatário{count === 1 ? "" : "s"}
+          <div className="flex items-center justify-between gap-4">
+            <span className="font-mono text-xs text-fg-3">
+              {count === null ? "—" : count} {count === 1 ? "contato" : "contatos"}
             </span>
-            <button
-              disabled
-              title="Disponível quando o Instagram estiver conectado"
-              className="btn-gold inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm opacity-50"
-            >
-              <Send size={16} /> Disparar
-            </button>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-fg-3">Envio em massa ainda não está disponível</span>
+              <Button variant="primary" icon={Send} disabled>
+                Disparar
+              </Button>
+            </div>
           </div>
+        </Card>
 
-          <div className="flex items-start gap-2 rounded-lg border border-[var(--border)] bg-black/20 p-3 text-xs text-[var(--muted)]">
-            <Info size={15} className="mt-0.5 shrink-0" />
-            <span>
-              O envio real ativa quando o Instagram estiver conectado. A Meta só permite
-              DMs dentro da janela de mensagens (24h após a última interação do contato),
-              então broadcasts respeitam essa regra.
-            </span>
-          </div>
-        </div>
+        <Note>Só recebem quem mandou mensagem nas últimas 24 horas</Note>
       </div>
     </AppShell>
   );
