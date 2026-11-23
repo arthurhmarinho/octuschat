@@ -198,6 +198,51 @@ conta (`token_invalid_at`) quando a Meta responde com o código 190, e a tela
 mostra "Reconectar" (banner no Início, ponto vermelho no seletor de conta).
 O worker também renova, a cada ~12 h, os tokens que vencem em até 15 dias.
 
+## Editor de fluxos
+
+A automação é um **grafo** (`automations.graph`, versão 3; grafos v2 continuam
+válidos). O editor (página da automação) é um canvas livre: arraste os nós, ligue
+as saídas, use o **+** de uma saída para continuar o caminho, **Organizar** para
+o layout automático (elkjs, carregado só ao clicar) e Ctrl/Cmd+Z para desfazer.
+O backend valida o grafo sempre (`schemas/automation.py`); o front só espelha.
+
+| Nó | O que faz | Saídas |
+| --- | --- | --- |
+| **Mensagem** | Texto, com botões de link **ou** respostas rápidas (não os dois) | `Próxima`; com respostas: uma por opção, `Outro texto` e `Sem resposta` |
+| **Pergunta** | Envia o texto e espera a resposta; salva em `{{variável}}` | `Respondeu`, `Sem resposta` |
+| **Condição** | Texto contém, contato novo, variável contém, variável existe | `Sim`, `Não` |
+| **Imagem** | Envia uma imagem por URL (png/jpeg) | `Próxima` |
+| **Esperar** | Atraso de 0,1 a 23 h | `Próxima` |
+
+Variáveis no texto: `{{username}}` e `{{nome}}` (respostas de Perguntas); variável
+inexistente vira vazio.
+
+**Limites (Meta e plano):** texto de **1000 bytes UTF-8** (640 com botões de
+link; o emoji pesa 4); até 3 botões de link; até 13 respostas rápidas, título de
+até 20 caracteres; até 50 nós por fluxo; sem ciclos; no gatilho de comentário o
+primeiro nó é uma mensagem (é a resposta privada).
+
+**Janela de 24 h:** só a primeira mensagem de um comentário sai sem a janela. Tudo
+o que vem depois exige que o contato tenha mandado uma DM nas últimas 24 h; sem
+ela a execução termina como `expirada` e nada é enviado. Por isso os prazos de
+espera (timeout de resposta e atraso) têm teto de **23 h**. Tocar numa resposta
+rápida é uma DM: abre a janela.
+
+**Execuções (`flow_runs`):** cada contato que entra num fluxo vira uma execução,
+com uma **cópia do grafo** (editar a automação não quebra quem está no meio).
+Só há uma execução ativa por automação e contato. A resposta do contato a uma
+pergunta ou resposta rápida **captura** a DM antes de qualquer gatilho de
+palavra-chave; o worker retoma os timeouts e atrasos vencidos. O estado é gravado
+antes do envio (no máximo uma vez: uma queda perde o trecho, nunca duplica). A
+aba **Execuções** da automação mostra onde cada contato parou e as respostas
+coletadas; terminadas há mais de 30 dias são apagadas.
+
+**Testar ao vivo (não verificado):** se a Meta aceita `quick_replies` na resposta
+privada a um comentário (se recusar, cai para texto e registra
+`quick_replies_unsupported_in_private_reply`); respostas rápidas não aparecem no
+Instagram desktop; os limites de anexo de imagem divergem entre as páginas da Meta
+(comece com png/jpeg pequeno).
+
 ## Migrações (Alembic)
 
 O schema é gerido só pelo Alembic — o app **não** cria tabelas sozinho. Em

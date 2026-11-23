@@ -56,6 +56,13 @@ const edgeTypes = { flow: FlowEdge };
 const edgeId = (e: { source: string; branch?: string | null; target: string }) =>
   `e|${e.source}|${e.branch ?? ""}|${e.target}`;
 
+/** Clicar no canvas não tira o foco de um campo do inspetor (o React Flow cancela o mousedown):
+ *  sem isto, Delete e Ctrl+Z continuariam "dentro" do campo. */
+const blurField = () => {
+  const el = document.activeElement as HTMLElement | null;
+  if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) el.blur();
+};
+
 const isEditable = (t: EventTarget | null) => {
   const el = t as HTMLElement | null;
   return !!el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName));
@@ -307,7 +314,8 @@ function Canvas({
     try {
       const next = await autoLayout(graph);
       update(() => next);
-      requestAnimationFrame(() => rf.fitView({ padding: 0.15, duration: 250 }));
+      // Depois que as novas posições entram no React Flow (um quadro adiante).
+      setTimeout(() => rf.fitView({ padding: 0.12, duration: 250 }), 80);
     } catch {
       toast("Não foi possível organizar o fluxo", "error");
     } finally {
@@ -436,14 +444,17 @@ function Canvas({
             isValidConnection={isValidConnection}
             onNodeClick={(_, n) => {
               // Sem trocar de aba: na Prévia, clicar nos nós mostra o caminho até cada um.
+              blurField();
               setSelected(n.id);
               setSelectedEdge(null);
             }}
             onEdgeClick={(_, e) => {
+              blurField();
               setSelectedEdge(e.id);
               setSelected(null);
             }}
             onPaneClick={() => {
+              blurField();
               setSelected(null);
               setSelectedEdge(null);
               setMenu(null);

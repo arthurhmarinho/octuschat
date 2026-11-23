@@ -26,7 +26,8 @@ export function useFlowHistory(initial: FlowGraph) {
   const update = useCallback((fn: (g: FlowGraph) => FlowGraph, key?: string) => {
     setState((s) => {
       const next = pruneEdges(fn(s.present));
-      if (next === s.present) return s;
+      // Edição que não muda nada (ex.: apagar uma aresta que já saiu) não vira passo.
+      if (next === s.present || JSON.stringify(next) === JSON.stringify(s.present)) return s;
       const now = Date.now();
       const coalesce = key && last.current?.key === key && now - last.current.at < COALESCE_MS;
       last.current = key ? { key, at: now } : null;
