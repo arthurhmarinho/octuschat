@@ -150,3 +150,32 @@ async def test_erro_de_rede_vira_excecao_sem_token(monkeypatch):
         await instagram_api.refresh_long_lived(TOKEN)
     assert TOKEN not in str(exc.value)
     assert "ConnectError" in str(exc.value)
+
+
+def test_build_quick_replies_message_limita_titulo_e_quantidade():
+    replies = [{"title": "x" * 30, "payload": f"qr:n1:q{i}"} for i in range(15)]
+    msg = instagram_api.build_quick_replies_message("Quer?", replies)
+    assert msg["text"] == "Quer?" and len(msg["quick_replies"]) == 13
+    assert msg["quick_replies"][0] == {"content_type": "text", "title": "x" * 20, "payload": "qr:n1:q0"}
+
+
+def test_build_image_message():
+    assert instagram_api.build_image_message("https://x.com/a.png") == {
+        "attachment": {"type": "image", "payload": {"url": "https://x.com/a.png"}}
+    }
+
+
+async def test_send_quick_replies_e_send_image_usam_header_e_o_destinatario_certo(mock_meta):
+    import json
+    calls, _ = mock_meta
+    await instagram_api.send_quick_replies(
+        "123", {"id": "456"}, "Quer?", [{"title": "Sim", "payload": "qr:n1:q1"}], TOKEN)
+    await instagram_api.send_quick_replies(
+        "123", {"comment_id": "c1"}, "Quer?", [{"title": "Sim", "payload": "qr:n1:q1"}], TOKEN)
+    await instagram_api.send_image("123", "456", "https://x.com/a.png", TOKEN)
+    bodies = [json.loads(c.content) for c in calls]
+    assert bodies[0]["recipient"] == {"id": "456"} and "quick_replies" in bodies[0]["message"]
+    assert bodies[1]["recipient"] == {"comment_id": "c1"}
+    assert bodies[2]["message"]["attachment"]["type"] == "image"
+    for req in calls:
+        _assert_token_no_header_e_fora_da_url(req)

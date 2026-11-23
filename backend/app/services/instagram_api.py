@@ -199,6 +199,50 @@ def build_message(text: str, buttons: list[dict] | None = None) -> dict:
     return {"text": text}
 
 
+def build_quick_replies_message(text: str, replies: list[dict]) -> dict:
+    """`message` com respostas rápidas (até 13; título até 20 caracteres)."""
+    return {
+        "text": text,
+        "quick_replies": [
+            {"content_type": "text", "title": r["title"][:20], "payload": r["payload"]}
+            for r in replies[:13]
+        ],
+    }
+
+
+def build_image_message(url: str) -> dict:
+    """`message` com um anexo de imagem (png/jpeg por URL pública)."""
+    return {"attachment": {"type": "image", "payload": {"url": url}}}
+
+
+async def send_quick_replies(
+    ig_user_id: str,
+    recipient: dict,
+    text: str,
+    replies: list[dict],
+    access_token: str,
+) -> dict:
+    """Envia texto com respostas rápidas.
+
+    `recipient`: ``{"id": <igsid>}`` (Send API, janela de 24h) ou
+    ``{"comment_id": <id>}`` (private reply — a Meta pode recusar: [não verificado]).
+    """
+    payload = {"recipient": recipient, "message": build_quick_replies_message(text, replies)}
+    return await _post(
+        _versioned(f"{ig_user_id}/messages"), access_token=access_token, json=payload
+    )
+
+
+async def send_image(
+    ig_user_id: str, recipient_id: str, url: str, access_token: str
+) -> dict:
+    """Envia uma imagem pela Send API (janela de 24h)."""
+    payload = {"recipient": {"id": recipient_id}, "message": build_image_message(url)}
+    return await _post(
+        _versioned(f"{ig_user_id}/messages"), access_token=access_token, json=payload
+    )
+
+
 async def reply_privately_to_comment(
     ig_user_id: str,
     comment_id: str,

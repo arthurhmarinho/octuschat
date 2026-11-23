@@ -89,3 +89,55 @@ async def send_dm(
     await instagram_api.send_message_to_user(
         ig_user_id, contact.ig_user_id, text, token, buttons
     )
+
+
+async def send_private_reply_quick_replies(
+    ig_user_id: str, comment_id: str, text: str, replies: list[dict], token: str
+) -> bool:
+    """Private reply com respostas rápidas. Devolve True se saiu com elas.
+
+    A Meta pode recusar `quick_replies` numa private reply [não verificado — testar
+    ao vivo]. Nesse caso (erro 4xx que não seja token inválido) cai para uma
+    private reply só de texto: a única do comentário ainda não foi gasta. Devolve
+    False e o chamador registra `quick_replies_unsupported_in_private_reply`.
+    Erro de token (190), de rede ou 5xx sobe: não dá para saber se saiu.
+    """
+    try:
+        await instagram_api.send_quick_replies(
+            ig_user_id, {"comment_id": comment_id}, text, replies, token
+        )
+        return True
+    except instagram_api.InstagramAPIError as exc:
+        transient = exc.status_code is None or exc.status_code >= 500
+        if transient or exc.code == 190:
+            raise
+        logger.warning("Private reply com respostas rápidas recusada (%s); enviando só texto.", exc)
+    await instagram_api.reply_privately_to_comment(
+        ig_user_id=ig_user_id, comment_id=comment_id, text=text, access_token=token
+    )
+    return False
+
+
+async def send_dm_quick_replies(
+    ig_user_id: str,
+    contact: Contact,
+    text: str,
+    replies: list[dict],
+    token: str,
+    now: datetime | None = None,
+) -> None:
+    """Texto com respostas rápidas pela Send API, só com a janela aberta."""
+    if not window_open(contact, now):
+        raise OutsideWindow(f"contato {contact.ig_user_id} sem DM nas últimas 24h")
+    await instagram_api.send_quick_replies(
+        ig_user_id, {"id": contact.ig_user_id}, text, replies, token
+    )
+
+
+async def send_dm_image(
+    ig_user_id: str, contact: Contact, url: str, token: str, now: datetime | None = None
+) -> None:
+    """Imagem pela Send API, só com a janela aberta."""
+    if not window_open(contact, now):
+        raise OutsideWindow(f"contato {contact.ig_user_id} sem DM nas últimas 24h")
+    await instagram_api.send_image(ig_user_id, contact.ig_user_id, url, token)

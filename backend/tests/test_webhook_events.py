@@ -143,9 +143,18 @@ async def test_dispatch_mensagem(capturado):
         "reply_to": reply_to,
         "attachments": None,
         "limiter": None,
+        "quick_reply_payload": None,
     }
 
 
 async def test_dispatch_tipo_desconhecido_nao_quebra(capturado):
     await webhook_events.dispatch("DB", "outro", "acc", {})
     assert capturado == {}
+
+
+async def test_dispatch_repassa_o_payload_da_resposta_rapida(capturado):
+    item = messaging()
+    item["message"]["quick_reply"] = {"payload": "qr:n1:q1"}
+    [ev] = extract_events({"entry": [{"id": "acc", "messaging": [item]}]})
+    await webhook_events.dispatch("DB", ev["kind"], ev["account_id"], ev["payload"])
+    assert capturado["inbound"]["quick_reply_payload"] == "qr:n1:q1"

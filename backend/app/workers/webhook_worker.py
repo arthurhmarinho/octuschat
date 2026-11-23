@@ -31,7 +31,7 @@ from app.core.database import SessionLocal
 from app.core.security import redact_secrets
 from app.crud import flow_run as flow_runs
 from app.crud import webhook_event as queue
-from app.services import token_service
+from app.services import automation_engine, token_service
 from app.services.send_limiter import NoLimit, SendDeferred, SendLimiter
 from app.services.webhook_events import dispatch
 
@@ -45,6 +45,7 @@ KEEP_DONE_FOR = timedelta(days=14)
 KEEP_FLOW_RUNS_FOR = timedelta(days=30)
 POLL_INTERVAL = 2.0  # segundos ociosos entre consultas (o webhook acorda antes)
 BATCH_SIZE = 10
+FLOW_BATCH = 20  # execuções de flow retomadas por ciclo
 REQUEUE_EVERY = 60.0  # segundos
 PURGE_EVERY = 3600.0  # segundos
 RENEW_EVERY = 12 * 3600.0  # segundos: renovação proativa dos tokens da Meta
@@ -89,6 +90,7 @@ class WebhookWorker:
             try:
                 await self.maintenance()
                 processed = await self.run_once()
+                processed += await self.run_flows()
             except asyncio.CancelledError:
                 raise
             except Exception:  # noqa: BLE001
@@ -112,6 +114,11 @@ class WebhookWorker:
         for event in events:
             await self._process(event)
         return len(events)
+
+    async def run_flows(self) -> int:
+        """Retoma as execuções de flow cujo prazo venceu (timeouts e atrasos)."""
+        async with self._session_factory() as db:
+            return await automation_engine.resume_due_runs(db, self._limiter, FLOW_BATCH)
 
     async def _process(self, event) -> None:
         started = time.monotonic()

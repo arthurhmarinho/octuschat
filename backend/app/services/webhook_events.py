@@ -109,6 +109,8 @@ async def dispatch(
             reply_to=message.get("reply_to"),
             attachments=message.get("attachments"),
             limiter=limiter,
+            # Toque numa resposta rápida: chega em message.quick_reply.payload.
+            quick_reply_payload=(message.get("quick_reply") or {}).get("payload"),
         )
     else:
         logger.warning("Evento de tipo desconhecido na fila: %s (ignorado)", kind)
