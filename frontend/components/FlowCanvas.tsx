@@ -39,6 +39,7 @@ type MsgData = {
   value: string;
   msgKey: string;
   canDelete: boolean;
+  readOnly: boolean;
   onEdit: (key: string, v: string) => void;
   onDelete: (key: string) => void;
 };
@@ -73,7 +74,7 @@ function MessageNode({ data }: NodeProps) {
           <GripVertical size={12} className="text-neutral-600" />
           {d.index === 0 ? "Mensagem inicial" : `Mensagem ${d.index + 1}`}
         </p>
-        {d.canDelete && (
+        {d.canDelete && !d.readOnly && (
           <button
             type="button"
             onClick={() => d.onDelete(d.msgKey)}
@@ -86,6 +87,7 @@ function MessageNode({ data }: NodeProps) {
       </div>
       <textarea
         defaultValue={d.value}
+        readOnly={d.readOnly}
         onChange={(e) => d.onEdit(d.msgKey, e.target.value)}
         placeholder={d.index === 0 ? "Oi! Obrigado pelo contato 💜" : `Mensagem ${d.index + 1}…`}
         className="nodrag nowheel w-full flex-1 resize-none rounded-b-xl bg-transparent px-3 py-2 text-sm text-white outline-none placeholder:text-neutral-600"
@@ -101,10 +103,13 @@ export default function FlowCanvas({
   messages,
   triggerLabel,
   onMessagesChange,
+  readOnly = false,
 }: {
   messages: EditorMessage[];
   triggerLabel: string;
   onMessagesChange: (messages: EditorMessage[]) => void;
+  /** Só visualização: sem editar, remover, adicionar nem reordenar. */
+  readOnly?: boolean;
 }) {
   // Fonte de verdade interna (com ids estáveis). Inicializada uma vez; mudanças
   // são empurradas para o pai como EditorMessage[] (id do nó + texto).
@@ -148,10 +153,11 @@ export default function FlowCanvas({
           value: m.text,
           msgKey: m.key,
           canDelete: i > 0,
+          readOnly,
           onEdit: (key: string, v: string) => onEditRef.current(key, v),
           onDelete: (key: string) => onDeleteRef.current(key),
         },
-        draggable: true,
+        draggable: !readOnly,
         width: 240,
         height: MSG_H,
         measured: { width: 240, height: MSG_H },
@@ -162,7 +168,7 @@ export default function FlowCanvas({
       });
     });
     return nodes;
-  }, []);
+  }, [readOnly]);
 
   const buildEdges = useCallback((msgs: Msg[]): Edge[] => {
     if (!msgs.length) return [];
@@ -260,16 +266,18 @@ export default function FlowCanvas({
       >
         <Background gap={18} size={1} />
         <Controls showInteractive={false} />
-        <Panel position="top-right">
-          <button
-            type="button"
-            onClick={onAdd}
-            disabled={msgsRef.current.length >= MAX_MESSAGES}
-            className="btn-gold inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs disabled:opacity-40"
-          >
-            <Plus size={14} /> Adicionar mensagem
-          </button>
-        </Panel>
+        {!readOnly && (
+          <Panel position="top-right">
+            <button
+              type="button"
+              onClick={onAdd}
+              disabled={msgsRef.current.length >= MAX_MESSAGES}
+              className="btn-gold inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs disabled:opacity-40"
+            >
+              <Plus size={14} /> Adicionar mensagem
+            </button>
+          </Panel>
+        )}
       </ReactFlow>
     </div>
   );

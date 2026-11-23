@@ -12,7 +12,7 @@ export type GraphNode = {
   type?: "message" | "condition";
   text?: string;
   buttons?: GraphButton[];
-  mode?: string;
+  mode?: "text_contains" | "is_new_contact";
   value?: string;
   position?: { x: number; y: number };
 };

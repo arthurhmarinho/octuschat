@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Images, Image as ImageIcon, Sparkles, Plus, X } from "lucide-react";
+import { ArrowLeft, Loader2, Images, Image as ImageIcon, Sparkles, Plus, X, TriangleAlert } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import DmPreview from "@/components/DmPreview";
 import FlowCanvas from "@/components/FlowCanvas";
@@ -96,8 +96,9 @@ export default function AutomationForm({
     setButtons((b) => b.map((x, idx) => (idx === i ? { ...x, [field]: value } : x)));
 
   const buildGraph = (btns: Button[]) => editorToGraph(messages, btns, start.graph);
-  // Preview: botões ainda incompletos também aparecem (como antes).
-  const previewGraph = buildGraph(buttons);
+  // Preview: botões ainda incompletos também aparecem (como antes). Com
+  // ramos, mostra o grafo salvo como está (o editor não o modifica).
+  const previewGraph = hasBranches && start.graph ? start.graph : buildGraph(buttons);
 
   const isComment = trigger === "comment_any" || trigger === "comment_keyword";
   const isKeyword = trigger === "comment_keyword" || trigger === "dm_keyword";
@@ -112,14 +113,16 @@ export default function AutomationForm({
       setSave({ kind: "error", msg: "Nenhuma conta do Instagram conectada." });
       return;
     }
+    // Grafo com condições: só leitura. Nada de mensagens/botões a validar e o
+    // PATCH não envia `graph`, então os ramos ficam intactos.
     const cleanButtons = buttons
       .map((b) => ({ label: b.label.trim(), url: b.url.trim() }))
       .filter((b) => b.label && b.url);
-    if (cleanButtons.some((b) => !/^https?:\/\//i.test(b.url))) {
+    if (!hasBranches && cleanButtons.some((b) => !/^https?:\/\//i.test(b.url))) {
       setSave({ kind: "error", msg: "A URL do botão precisa começar com http:// ou https://" });
       return;
     }
-    if (!messages[0]?.text.trim()) {
+    if (!hasBranches && !messages[0]?.text.trim()) {
       setSave({ kind: "error", msg: "Escreva a mensagem inicial." });
       return;
     }
@@ -133,8 +136,8 @@ export default function AutomationForm({
       post_id: isComment && scope === "specific" ? postId || null : null,
       bind_next: isComment && scope === "next",
       public_reply: isComment ? publicReply || null : null,
-      graph: buildGraph(cleanButtons),
     };
+    if (!hasBranches) payload.graph = buildGraph(cleanButtons);
     if (!isEdit) payload.account_id = accountId;
 
     try {
@@ -188,11 +191,13 @@ export default function AutomationForm({
                 : TRIGGER_SHORT[trigger]
             }
             onMessagesChange={setMessages}
+            readOnly={hasBranches}
           />
           {hasBranches && (
-            <p className="mt-2 text-xs text-amber-400">
-              Este fluxo tem condições criadas fora do editor. O canvas mostra só o
-              caminho principal — salvar por aqui substitui os ramos.
+            <p className="mt-2 flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-xs text-amber-400">
+              <TriangleAlert size={14} className="mt-0.5 shrink-0" />
+              Este fluxo tem condições, que ainda não podem ser editadas aqui. Você pode
+              mudar o gatilho; as mensagens ficam como estão.
             </p>
           )}
         </div>
@@ -348,6 +353,7 @@ export default function AutomationForm({
               </div>
             )}
 
+            {!hasBranches && (
             <div>
               <label className={labelCls}>Botões de link (até 3)</label>
               <div className="space-y-2">
@@ -386,6 +392,7 @@ export default function AutomationForm({
                 </button>
               )}
             </div>
+            )}
 
             <button
               onClick={handleSave}
