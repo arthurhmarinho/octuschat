@@ -24,6 +24,7 @@ import {
   VAR_RE,
   byteLength,
   newItemId,
+  outputsOf,
   textLimit,
   variablesOf,
   type ConditionMode,
@@ -326,7 +327,12 @@ export default function NodeInspector({
   triggerLabel,
   patch,
   onDelete,
+  choice,
+  onChoice,
 }: {
+  /** Saída que a prévia segue neste nó (`branch`; "" = padrão). */
+  choice?: string;
+  onChoice: (branch: string) => void;
   /** `null` = nenhum nó selecionado; "trigger" = o Gatilho. */
   node: GraphNode | "trigger" | null;
   graph: FlowGraph;
@@ -484,6 +490,23 @@ export default function NodeInspector({
             {node.hours != null ? ` (esperar ${formatHours(node.hours)})` : ""}
           </Note>
         </>
+      )}
+
+      {outputsOf(node).length > 1 && (
+        <Field label="Seguir na prévia" htmlFor="node-preview-branch" hint="Qual saída a prévia mostra depois deste nó">
+          <Select
+            id="node-preview-branch"
+            value={choice ?? ""}
+            onChange={(e) => onChoice(e.target.value)}
+          >
+            <option value="">Primeira saída ligada</option>
+            {outputsOf(node).map((o) => (
+              <option key={o.handle} value={o.branch ?? ""}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
       )}
 
       <div className="border-t border-line pt-4">

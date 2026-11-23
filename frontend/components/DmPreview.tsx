@@ -1,76 +1,76 @@
 "use client";
 
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
 import { BatteryFull, Camera, ChevronLeft, SignalHigh, Wifi } from "lucide-react";
 import { cx } from "@/components/ui";
-import type { FlowGraph, GraphButton } from "@/lib/flowGraph";
-import { firstPath } from "@/lib/flowPath";
+import type { Bubble, Segment } from "@/lib/flowPath";
 
 /**
- * Preview ao vivo da DM numa moldura de iPhone. As cores aqui reproduzem o
+ * Prévia ao vivo da DM numa moldura de iPhone. As cores aqui reproduzem o
  * Instagram dark (é conteúdo, não chrome do painel), por isso são literais.
  */
 const IG = {
   bubble: "bg-[#262626]",
+  mine: "bg-[#3797f0]",
   muted: "text-[#a8a8a8]",
   link: "text-[#e0f1ff]",
 };
 
 type Props = {
   username: string;
-  graph: FlowGraph;
+  bubbles: Bubble[];
   /** Gatilho de comentário: a 1ª DM é uma resposta privada. */
   isComment?: boolean;
-  /** Mensagem em edição no inspetor (ganha contorno). */
+  /** Nó selecionado no canvas (suas bolhas ganham contorno). */
   selectedId?: string | null;
 };
 
-const visibleButtons = (buttons?: GraphButton[]) =>
-  (buttons ?? []).filter((b) => b.label.trim() || b.url.trim()).slice(0, 3);
+function Text({ segments }: { segments: Segment[] }) {
+  return (
+    <>
+      {segments.map((s, i) =>
+        s.variable ? (
+          <span key={i} className="text-[#8e8e8e]">
+            {s.text}
+          </span>
+        ) : (
+          <Fragment key={i}>{s.text}</Fragment>
+        )
+      )}
+    </>
+  );
+}
 
-function Message({
-  text,
-  buttons,
-  selected,
-  dim,
-}: {
-  text: string;
-  buttons: GraphButton[];
-  selected: boolean;
-  dim: boolean;
-}) {
-  if (!text.trim() && !buttons.length) return null;
+const ring = (on: boolean) => on && "shadow-[0_0_0_1.5px_rgba(237,237,237,0.45)]";
+
+function Image({ url, selected }: { url: string; selected: boolean }) {
+  const [broken, setBroken] = useState(false);
   return (
     <div
       className={cx(
-        "max-w-[82%] overflow-hidden rounded-[18px] rounded-bl-[4px] text-[13px] leading-[18px] text-white",
+        "max-w-[70%] overflow-hidden rounded-[18px] rounded-bl-[4px]",
         IG.bubble,
-        "transition-[opacity,box-shadow] duration-150 ease-out",
-        selected && "shadow-[0_0_0_1.5px_rgba(237,237,237,0.45)]",
-        dim && "opacity-60"
+        "transition-shadow duration-150 ease-out",
+        ring(selected)
       )}
     >
-      {text.trim() && <p className="whitespace-pre-wrap break-words px-3 py-2">{text}</p>}
-      {buttons.map((b, i) => (
-        <div
-          key={b.id ?? i}
-          className={cx(
-            "border-t border-white/10 px-3 py-2.5 text-center font-medium",
-            IG.link
-          )}
-        >
-          {b.label.trim() || "Botão"}
+      {broken ? (
+        <div className={cx("flex h-28 w-40 items-center justify-center px-3 text-center text-xs", IG.muted)}>
+          Não foi possível carregar a imagem
         </div>
-      ))}
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="Imagem do fluxo" className="max-h-52 w-full object-cover" onError={() => setBroken(true)} />
+      )}
     </div>
   );
 }
 
-export default function DmPreview({ username, graph, isComment = false, selectedId = null }: Props) {
+export default function DmPreview({ username, bubbles, isComment = false, selectedId = null }: Props) {
   const handle = username || "sua_conta";
-  const messages = firstPath(graph).flatMap((n) => (n.type === "message" ? [n] : []));
-  const first = messages[0];
-  const firstEmpty = !first?.text?.trim() && !visibleButtons(first?.buttons).length;
+  const empty = bubbles.length === 0;
+  const lastIdx = bubbles.reduce((acc, b, i) => (b.kind === "text" ? i : acc), -1);
+  const firstText = bubbles.findIndex((b) => b.kind === "text");
 
   return (
     <div className="mx-auto w-[290px] select-none">
@@ -103,40 +103,89 @@ export default function DmPreview({ username, graph, isComment = false, selected
           </div>
 
           {/* Mensagens */}
-          <div className="min-h-[260px] space-y-1.5 px-3 py-4">
+          <div className="min-h-[300px] space-y-1.5 px-3 py-4">
             {isComment && (
               <p className={cx("pb-2 text-center text-xs", IG.muted)}>Respondeu ao seu comentário</p>
             )}
 
-            {firstEmpty ? (
+            {empty && (
               <div className={cx("max-w-[82%] rounded-[18px] rounded-bl-[4px] bg-[#262626]/60 px-3 py-2 text-[13px]", IG.muted)}>
                 Sua mensagem aparece aqui
               </div>
-            ) : (
-              <Message
-                text={first.text ?? ""}
-                buttons={visibleButtons(first.buttons)}
-                selected={first.id === selectedId}
-                dim={false}
-              />
             )}
 
-            {messages.slice(1).map((m, i) => {
-              const buttons = visibleButtons(m.buttons);
-              if (!(m.text ?? "").trim() && !buttons.length) return null;
+            {bubbles.map((b, i) => {
+              const selected = b.nodeId === selectedId;
+              if (b.kind === "divider") {
+                return (
+                  <p key={i} className={cx("py-1.5 text-center text-xs", IG.muted)}>
+                    {b.text}
+                  </p>
+                );
+              }
+              if (b.kind === "user") {
+                return (
+                  <div key={i} className="flex justify-end">
+                    <div
+                      className={cx(
+                        "max-w-[75%] rounded-[18px] rounded-br-[4px] px-3 py-2 text-[13px] leading-[18px] text-white",
+                        IG.mine,
+                        "transition-shadow duration-150 ease-out",
+                        ring(selected)
+                      )}
+                    >
+                      {b.text}
+                    </div>
+                  </div>
+                );
+              }
+              if (b.kind === "image") return <Image key={i} url={b.url} selected={selected} />;
               return (
-                <Fragment key={m.id}>
-                  {isComment && i === 0 && (
+                <Fragment key={i}>
+                  {isComment && i === firstText + 1 && (
                     <p className={cx("pb-1 pt-3 text-center text-xs", IG.muted)}>
                       Se a janela de 24h estiver aberta
                     </p>
                   )}
-                  <Message
-                    text={m.text ?? ""}
-                    buttons={buttons}
-                    selected={m.id === selectedId}
-                    dim={isComment}
-                  />
+                  <div
+                    className={cx(
+                      "max-w-[82%] overflow-hidden rounded-[18px] rounded-bl-[4px] text-[13px] leading-[18px] text-white",
+                      IG.bubble,
+                      "transition-[opacity,box-shadow] duration-150 ease-out",
+                      ring(selected),
+                      isComment && firstText >= 0 && i > firstText && "opacity-60"
+                    )}
+                  >
+                    {b.segments.length > 0 && (
+                      <p className="whitespace-pre-wrap break-words px-3 py-2">
+                        <Text segments={b.segments} />
+                      </p>
+                    )}
+                    {b.buttons.map((btn, j) => (
+                      <div
+                        key={btn.id ?? j}
+                        className={cx("border-t border-white/10 px-3 py-2.5 text-center font-medium", IG.link)}
+                      >
+                        {btn.label.trim() || "Botão"}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Respostas rápidas: chips abaixo da última mensagem, como no Instagram */}
+                  {b.replies.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      {b.replies.map((r, j) => (
+                        <span
+                          key={j}
+                          className={cx(
+                            "rounded-full border border-white/25 px-3 py-1.5 text-[13px] text-white",
+                            i !== lastIdx && "opacity-50"
+                          )}
+                        >
+                          {r}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </Fragment>
               );
             })}

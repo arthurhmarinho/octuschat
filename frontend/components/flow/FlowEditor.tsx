@@ -17,6 +17,7 @@ import "@xyflow/react/dist/style.css";
 import { LayoutGrid, Redo2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import DmPreview from "@/components/DmPreview";
+import { buildBubbles } from "@/lib/flowPath";
 import { Button, IconButton, Note, Segmented, cx, useFeedback } from "@/components/ui";
 import {
   DEFAULT_HANDLE,
@@ -91,6 +92,8 @@ function Canvas({
   const [tab, setTab] = useState<Tab>("edit");
   const [menu, setMenu] = useState<{ nodeId: string; branch: string | null; anchor: DOMRect } | null>(null);
   const [organizing, setOrganizing] = useState(false);
+  // Saída que a prévia segue em cada nó com mais de uma (`branch`; "" = padrão).
+  const [choices, setChoices] = useState<Record<string, string>>({});
 
   const canAddNode = graph.nodes.length < MAX_NODES;
   // Só vale na abertura (fitView lê as opções uma vez).
@@ -423,9 +426,9 @@ function Canvas({
             onConnect={onConnect}
             isValidConnection={isValidConnection}
             onNodeClick={(_, n) => {
+              // Sem trocar de aba: na Prévia, clicar nos nós mostra o caminho até cada um.
               setSelected(n.id);
               setSelectedEdge(null);
-              setTab((t) => (t === "runs" ? t : "edit"));
             }}
             onEdgeClick={(_, e) => {
               setSelectedEdge(e.id);
@@ -498,6 +501,8 @@ function Canvas({
                 graph={graph}
                 isStart={selected === graph.start}
                 triggerLabel={triggerLabel}
+                choice={selected ? choices[selected] : undefined}
+                onChoice={(branch) => selected && setChoices((c) => ({ ...c, [selected]: branch }))}
                 patch={(patch, key) => selected && selected !== TRIGGER_ID && patchNode(selected, patch, key)}
                 onDelete={() => selected && deleteNode(selected)}
               />
@@ -505,7 +510,7 @@ function Canvas({
             {tab === "preview" && (
               <DmPreview
                 username={username}
-                graph={graph}
+                bubbles={buildBubbles(graph, username, selected && selected !== TRIGGER_ID ? selected : null, choices)}
                 isComment={isComment}
                 selectedId={selected && selected !== TRIGGER_ID ? selected : null}
               />
