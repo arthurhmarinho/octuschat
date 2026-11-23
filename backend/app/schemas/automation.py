@@ -96,6 +96,8 @@ class MessageNode(_Node):
             raise ValueError("nó de mensagem precisa de texto ou botões (ou respostas rápidas)")
         if buttons and replies:
             raise ValueError("botões de link e respostas rápidas não podem ficar na mesma mensagem")
+        if replies and not self.text.strip():
+            raise ValueError("a mensagem com respostas rápidas precisa de texto")
         limit = MAX_TEXT_WITH_BUTTONS if buttons else MAX_TEXT
         if text_bytes(self.text) > limit:
             raise ValueError(f"mensagem com mais de {limit} bytes")
