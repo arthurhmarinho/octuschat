@@ -8,6 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.account import InstagramAccount
 
 
+class AccountOwnedByOther(Exception):
+    """A conta do Instagram já está ligada a outro usuário do painel."""
+
+
 async def upsert(
     db: AsyncSession,
     ig_user_id: str,
@@ -15,18 +19,28 @@ async def upsert(
     username: str | None = None,
     token_expires_at: datetime | None = None,
     ig_id: str | None = None,
+    owner_user_id: int | None = None,
 ) -> InstagramAccount:
     """Cria ou atualiza a conta (re-conexão atualiza o token).
 
     `access_token_enc` já vem cifrado (token_service.encrypt_token).
+    `owner_user_id`: grava o dono só se a conta ainda não tiver um; se já for de
+    OUTRO usuário, levanta `AccountOwnedByOther` sem alterar nada.
     """
     account = await db.get(InstagramAccount, ig_user_id)
     if account is None:
         account = InstagramAccount(
-            ig_user_id=ig_user_id, access_token_enc=access_token_enc
+            ig_user_id=ig_user_id,
+            access_token_enc=access_token_enc,
+            owner_user_id=owner_user_id,
         )
         db.add(account)
     else:
+        if owner_user_id is not None:
+            if account.owner_user_id is None:
+                account.owner_user_id = owner_user_id
+            elif account.owner_user_id != owner_user_id:
+                raise AccountOwnedByOther(ig_user_id)
         account.access_token_enc = access_token_enc
     if username is not None:
         account.username = username
@@ -57,3 +71,22 @@ async def get_by_any_id(db: AsyncSession, some_id: str) -> InstagramAccount | No
 async def list_all(db: AsyncSession) -> list[InstagramAccount]:
     result = await db.execute(select(InstagramAccount))
     return list(result.scalars().all())
+
+
+async def list_by_owner(db: AsyncSession, user_id: int) -> list[InstagramAccount]:
+    result = await db.execute(
+        select(InstagramAccount)
+        .where(InstagramAccount.owner_user_id == user_id)
+        .order_by(InstagramAccount.connected_at)
+    )
+    return list(result.scalars().all())
+
+
+async def get_owned(
+    db: AsyncSession, user_id: int, ig_user_id: str
+) -> InstagramAccount | None:
+    """A conta só se for deste usuário; senão None (o chamador responde 404)."""
+    account = await db.get(InstagramAccount, ig_user_id)
+    if account is None or account.owner_user_id != user_id:
+        return None
+    return account
