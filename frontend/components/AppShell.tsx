@@ -140,6 +140,13 @@ export default function AppShell({
 
   return (
     <div className={cx("flex", fill ? "h-screen" : "min-h-screen")}>
+      <a
+        href="#conteudo"
+        className="sr-only z-[70] rounded-control bg-fg px-3 py-2 text-[13px] font-medium text-on-fg focus:not-sr-only focus:fixed focus:left-3 focus:top-3"
+      >
+        Pular para o conteúdo
+      </a>
+
       {/* Sidebar fixa (≥768) */}
       <aside className="fixed left-0 top-0 hidden h-screen w-60 border-r border-line md:block">
         <Sidebar pathname={pathname} />
@@ -153,6 +160,8 @@ export default function AppShell({
           open ? "opacity-100" : "pointer-events-none opacity-0"
         )}
         aria-hidden={!open}
+        // Fechado, o menu não pode receber foco por Tab.
+        inert={!open}
       >
         <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
         <aside className="absolute left-0 top-0 h-full w-60 border-r border-line">
@@ -186,14 +195,16 @@ export default function AppShell({
           {action}
         </header>
 
-        <div
+        <main
+          id="conteudo"
+          tabIndex={-1}
           className={cx(
-            "mx-auto w-full max-w-[1440px] flex-1 px-4 py-8 md:px-8",
+            "mx-auto w-full max-w-[1440px] flex-1 px-4 py-8 outline-none md:px-8",
             fill && "flex min-h-0 flex-col"
           )}
         >
           {children}
-        </div>
+        </main>
       </div>
     </div>
   );

@@ -11,3 +11,5 @@ export { default as StatusDot } from "./StatusDot";
 export { default as Spinner } from "./Spinner";
 export { cx } from "./cx";
 export { default as Segmented } from "./Segmented";
+export { Skeleton, SkeletonRows } from "./Skeleton";
+export { FeedbackProvider, useFeedback } from "./Feedback";

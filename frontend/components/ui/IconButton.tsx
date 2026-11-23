@@ -19,6 +19,8 @@ export default function IconButton({
       type={type}
       className={cx(
         "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-control text-fg-3",
+        // Toque: alvo de 44px em telas sem ponteiro fino.
+        "[@media(pointer:coarse)]:h-11 [@media(pointer:coarse)]:w-11",
         "transition-[background-color,color,transform] duration-150 ease-out",
         "active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50",
         tone === "danger"
