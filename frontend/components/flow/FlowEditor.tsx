@@ -335,6 +335,15 @@ function Canvas({
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo, selected, selectedEdge, deleteNode, deleteEdge]);
 
+  // Execução escolhida na aba Execuções: leva a vista até o nó onde ela parou.
+  useEffect(() => {
+    if (!highlightId) return;
+    const n = nodeById(graph, highlightId);
+    if (n?.position) rf.setCenter(n.position.x + NODE_W / 2, n.position.y + nodeHeight(n) / 2, { zoom: 0.9, duration: 250 });
+    // só ao trocar o destaque
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightId]);
+
   // Nó selecionado que deixou de existir (desfazer, excluir): limpa a seleção.
   useEffect(() => {
     if (selected && selected !== TRIGGER_ID && !nodeById(graph, selected)) setSelected(null);

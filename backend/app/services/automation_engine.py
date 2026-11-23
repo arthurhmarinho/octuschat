@@ -136,7 +136,14 @@ async def _persist_state(db: AsyncSession, run: FlowRun, outcome: flow_runner.Ou
     else:
         # Segue andando (ou concluindo): deixa de esperar.
         await crud.flow_run.save(
-            db, run, context=outcome.context, status="running", waiting_for=None, resume_at=None
+            db,
+            run,
+            context=outcome.context,
+            status="running",
+            waiting_for=None,
+            resume_at=None,
+            # Onde a execução "parou" (log): o último nó que ela processou.
+            current_node_id=outcome.last_node_id or run.current_node_id,
         )
 
 
@@ -195,6 +202,7 @@ async def _send_actions(
                 continue
         except messenger.OutsideWindow as exc:
             logger.info("Flow da execução %s parou: %s", run.id, exc)
+            await crud.flow_run.save(db, run, current_node_id=action["node_id"])
             await crud.flow_run.finish(db, run, "expired", OUTSIDE_WINDOW)
             return result
         except Exception as exc:  # noqa: BLE001
@@ -205,6 +213,7 @@ async def _send_actions(
                 logger.exception("Falha ao enviar a 1ª ação da execução %s: %s", run.id, exc)
             else:
                 logger.warning("Falha na ação %s da execução %s: %s", i + 1, run.id, exc)
+            await crud.flow_run.save(db, run, current_node_id=action["node_id"])
             await crud.flow_run.finish(db, run, "failed", error[:2000])
             return result
         if i == 0:

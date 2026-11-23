@@ -134,11 +134,13 @@ class Outcome:
       - ``{"status": "waiting", "waiting_for": "timer", "node_id": <PRÓXIMO nó>,
            "resume_in_hours": h}``
     ``context``: cópia atualizada (variáveis salvas, último texto).
+    ``last_node_id``: o último nó processado (onde a execução "parou", para o log).
     """
 
     actions: list[dict] = field(default_factory=list)
     next_state: dict = field(default_factory=lambda: {"status": "completed"})
     context: dict = field(default_factory=dict)
+    last_node_id: str | None = None
 
 
 def _waiting_reply(node_id: str, hours) -> dict:
@@ -220,6 +222,7 @@ def advance(graph, node_id: str | None, context: dict | None, event: dict | None
         if node is None:
             logger.warning("Flow aponta para nó inexistente: %s", current)
             break
+        outcome.last_node_id = current
 
         node_type = node.get("type") or "message"
         if node_type == "message":

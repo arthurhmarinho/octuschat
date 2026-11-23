@@ -173,6 +173,7 @@ async def test_comentario_resposta_rapida_continua_o_flow(db, meta):
     assert "NÃO DEVIA SAIR" not in str(meta.calls)
     run = await the_run(db)
     assert run.status == "completed" and run.finished_at is not None
+    assert run.current_node_id == "sim"          # o log mostra o último nó executado
     assert await out_texts(db) == ["Quer o link?\n\n[Quero] [Agora não]", "Valeu fulano!"]
 
 
@@ -310,6 +311,7 @@ async def test_comentario_sem_janela_so_a_private_reply_e_o_resto_expira(db, met
     assert [c[0] for c in meta.sent()] == ["private"]
     run = await the_run(db)
     assert run.status == "expired" and run.last_error == "outside_window"
+    assert run.current_node_id == "b"            # parou no nó que não pôde ser enviado
 
 
 async def test_atraso_que_vence_com_a_janela_fechada_expira_sem_enviar(db, meta, pg_sessions):

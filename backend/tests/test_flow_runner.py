@@ -538,3 +538,11 @@ def test_teto_de_passos_vale_por_chamada(caplog):
         out = advance(flow, "a", {})
     assert len(out.actions) == MAX_STEPS == 50
     assert "limite" in caplog.text
+
+
+def test_last_node_id_e_o_ultimo_no_processado():
+    flow = g3([msg("a", "1"), delay(), msg("b", "2")], [edge("a", "d"), edge("d", "b")])
+    assert advance(flow, "a", {}).last_node_id == "d"
+    assert advance(flow, "b", {}).last_node_id == "b"
+    out = advance(fluxo_qr(), "n1", {}, {"type": "reply", "text": "x", "quick_reply_payload": "qr:n1:q1"})
+    assert out.last_node_id == "sim"

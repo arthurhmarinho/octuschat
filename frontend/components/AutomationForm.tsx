@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { CalendarClock, ChevronDown, Image as ImageIcon, Images } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import FlowEditor from "@/components/flow/FlowEditor";
+import RunsPanel from "@/components/flow/RunsPanel";
 import { useFlowHistory } from "@/components/flow/useFlowHistory";
 import { validateGraph } from "@/components/flow/validateGraph";
 import PostPicker from "@/components/PostPicker";
@@ -108,6 +109,8 @@ export default function AutomationForm({
   const flow = useFlowHistory(normalizeGraph(start.graph));
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
   const [triggerOpen, setTriggerOpen] = useState(!isEdit);
+  // Execução escolhida na aba Execuções: destaca onde ela parou no canvas.
+  const [selectedRun, setSelectedRun] = useState<{ id: number; nodeId: string | null } | null>(null);
 
   // ── Alterações não salvas ──
   // A "foto" inicial é tirada no primeiro render; qualquer diferença depois dela é edição.
@@ -402,6 +405,17 @@ export default function AutomationForm({
             triggerKeywords={activeKeyword}
             username={account?.username ?? ""}
             isComment={isComment}
+            highlightId={selectedRun?.nodeId ?? null}
+            runsPanel={
+              isEdit && automationId != null ? (
+                <RunsPanel
+                  automationId={automationId}
+                  graph={flow.graph}
+                  selectedRunId={selectedRun?.id ?? null}
+                  onSelect={(r) => setSelectedRun(r ? { id: r.id, nodeId: r.current_node_id } : null)}
+                />
+              ) : undefined
+            }
           />
         </section>
 
