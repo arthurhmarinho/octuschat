@@ -3,7 +3,8 @@
 import { Fragment } from "react";
 import { BatteryFull, Camera, ChevronLeft, SignalHigh, Wifi } from "lucide-react";
 import { cx } from "@/components/ui";
-import { linearMessages, type FlowGraph, type GraphButton } from "@/lib/flowGraph";
+import type { FlowGraph, GraphButton } from "@/lib/flowGraph";
+import { firstPath } from "@/lib/flowPath";
 
 /**
  * Preview ao vivo da DM numa moldura de iPhone. As cores aqui reproduzem o
@@ -67,7 +68,7 @@ function Message({
 
 export default function DmPreview({ username, graph, isComment = false, selectedId = null }: Props) {
   const handle = username || "sua_conta";
-  const messages = linearMessages(graph);
+  const messages = firstPath(graph).flatMap((n) => (n.type === "message" ? [n] : []));
   const first = messages[0];
   const firstEmpty = !first?.text?.trim() && !visibleButtons(first?.buttons).length;
 

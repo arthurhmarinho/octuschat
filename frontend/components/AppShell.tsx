@@ -225,6 +225,7 @@ export default function AppShell({
   action,
   back,
   fill = false,
+  wide = false,
   children,
 }: {
   title: string;
@@ -233,6 +234,8 @@ export default function AppShell({
   back?: { href: string; label: string };
   /** Conteúdo ocupa toda a altura disponível (ex.: Conversas). */
   fill?: boolean;
+  /** Sem o limite de largura (ex.: o editor de fluxos usa a tela toda). */
+  wide?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -309,7 +312,8 @@ export default function AppShell({
           id="conteudo"
           tabIndex={-1}
           className={cx(
-            "mx-auto w-full max-w-[1440px] flex-1 px-4 py-8 outline-none md:px-8",
+            "mx-auto w-full flex-1 px-4 py-8 outline-none md:px-8",
+            !wide && "max-w-[1440px]",
             fill && "flex min-h-0 flex-col"
           )}
         >

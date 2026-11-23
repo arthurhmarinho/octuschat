@@ -1,7 +1,7 @@
 import type {
+  ComponentProps,
   InputHTMLAttributes,
   SelectHTMLAttributes,
-  TextareaHTMLAttributes,
 } from "react";
 import { cx } from "./cx";
 
@@ -19,7 +19,7 @@ export function Textarea({
   className,
   rows = 3,
   ...rest
-}: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+}: ComponentProps<"textarea">) {
   return (
     <textarea
       rows={rows}
