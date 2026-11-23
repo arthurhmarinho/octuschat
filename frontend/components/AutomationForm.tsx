@@ -372,7 +372,7 @@ export default function AutomationForm({
                         maxLength={MAX_TEXT}
                         value={selected.text}
                         onChange={(e) => updateMessage(selected.id, { text: e.target.value })}
-                        placeholder={selectedIndex === 0 ? "Oi! Obrigado pelo contato" : `Mensagem ${selectedIndex + 1}`}
+                        placeholder={selectedIndex === 0 ? "Oi, obrigado pelo contato" : `Mensagem ${selectedIndex + 1}`}
                       />
                       <p className="mt-2 text-right font-mono text-xs tabular-nums text-fg-3">
                         {selected.text.length}/{MAX_TEXT}

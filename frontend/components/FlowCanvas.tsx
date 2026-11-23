@@ -41,7 +41,7 @@ const handleProps = (
 function TriggerNode({ data }: NodeProps) {
   const d = data as unknown as TriggerData;
   return (
-    <div className="flex h-full w-full flex-col justify-center gap-1.5 overflow-hidden rounded-card border border-line bg-card px-3.5">
+    <div className="flex h-full w-full flex-col justify-center gap-1.5 overflow-hidden rounded-card border border-line bg-card px-4">
       <p className="text-[13px] font-medium text-fg">Gatilho</p>
       <p className="truncate text-[13px] text-fg-2">{d.label}</p>
       {d.keywords && <KeywordTokens value={d.keywords} className="max-h-5 overflow-hidden" />}
@@ -56,7 +56,7 @@ function MessageNode({ data }: NodeProps) {
   return (
     <div
       className={cx(
-        "flex h-full w-full flex-col gap-1 overflow-hidden rounded-card border px-3.5 py-2.5",
+        "flex h-full w-full flex-col gap-1 overflow-hidden rounded-card border px-4 py-2.5",
         "transition-colors duration-150 ease-out",
         d.draggable ? "cursor-pointer" : "cursor-default",
         d.selected ? "border-line-strong bg-raised" : "border-line bg-card hover:border-line-strong"
