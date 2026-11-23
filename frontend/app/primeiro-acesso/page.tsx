@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import PasswordForm from "@/components/PasswordForm";
 import { Card } from "@/components/ui";
 import { useUser } from "@/lib/user";
@@ -8,9 +8,12 @@ import { useUser } from "@/lib/user";
 /** Convite novo: a senha temporária precisa ser trocada antes de usar o painel. */
 export default function PrimeiroAcessoPage() {
   const { user, resolved } = useUser();
+  const finishing = useRef(false);
 
-  // Quem já trocou a senha não tem o que fazer aqui.
+  // Quem já trocou a senha não tem o que fazer aqui. (Não vale logo depois de
+  // trocar: aí o destino é /configuracoes, definido abaixo.)
   useEffect(() => {
+    if (finishing.current) return;
     if (resolved && user && !user.must_change_password) window.location.replace("/");
   }, [resolved, user]);
 
@@ -23,7 +26,10 @@ export default function PrimeiroAcessoPage() {
         </p>
         <PasswordForm
           submitLabel="Salvar e continuar"
-          onDone={() => window.location.replace("/configuracoes")}
+          onDone={() => {
+            finishing.current = true;
+            window.location.replace("/configuracoes");
+          }}
         />
       </Card>
     </main>

@@ -66,13 +66,18 @@ registra em `message_logs` (evita responder 2x).
 
 ### Segurança
 
-- **Login:** o painel exige a senha de admin (`ADMIN_PASSWORD`). A sessão é
-  um cookie httpOnly assinado com `SESSION_SECRET`.
+- **Login:** por e-mail e senha (usuários na tabela `users`, senha com scrypt).
+  Quem valida é o backend (`POST /auth/login`); o Next grava um cookie httpOnly
+  `<uid>.<exp>.<hmac>`, assinado com `SESSION_SECRET`. Cada usuário vê só as
+  contas do Instagram que são dele (`instagram_accounts.owner_user_id`).
 - **API:** o browser nunca fala direto com o backend. O route handler
-  `frontend/app/api/backend/[...path]` confere a sessão e injeta o
-  `X-Octus-Secret` server-side. O backend recusa qualquer chamada sem esse
-  segredo, exceto `/health`, o webhook da Meta (verificado pela assinatura) e
-  o callback do OAuth (verificado pelo `state` assinado).
+  `frontend/app/api/backend/[...path]` confere a sessão e injeta, server-side,
+  `X-Octus-Secret` e `X-Octus-User` (o usuário da sessão; um `X-Octus-User`
+  vindo do browser é ignorado). O backend recusa qualquer chamada sem o
+  segredo e sem um usuário válido, exceto `/health`, o webhook da Meta
+  (verificado pela assinatura) e o callback do OAuth (verificado pelo `state`
+  assinado, que carrega o id de quem iniciou a conexão). Conta de outro
+  usuário responde **404**, igual a uma conta que não existe.
 - **Tokens da Meta:** cifrados no banco (Fernet, `TOKEN_ENCRYPTION_KEYS`),
   enviados no header `Authorization` e removidos de logs e mensagens de erro.
 
@@ -99,7 +104,6 @@ registra em `message_logs` (evita responder 2x).
 | Variável | Para quê |
 | --- | --- |
 | `BACKEND_URL` | URL do backend (ex.: `https://seu-backend.onrender.com`) |
-| `ADMIN_PASSWORD` | Senha de login do painel |
 | `SESSION_SECRET` | Assina o cookie de sessão (trocar = desloga todo mundo) |
 | `BACKEND_API_SECRET` | **Mesmo valor** de `API_SECRET` do backend |
 
@@ -144,9 +148,55 @@ cp .env.example .env               # preencher (ver tabela acima)
 ```bash
 cd frontend
 npm install
-cp .env.example .env.local         # BACKEND_URL, ADMIN_PASSWORD, SESSION_SECRET, BACKEND_API_SECRET
-npm run dev                        # http://localhost:3000 → tela de login
+cp .env.example .env.local         # BACKEND_URL, SESSION_SECRET, BACKEND_API_SECRET
+npm run dev                        # http://localhost:3000 → tela de login (crie um usuário antes: ver "Usuários e testadores")
 ```
+
+## Usuários e testadores
+
+Não há cadastro pela tela: quem administra cria o usuário por linha de comando
+(a partir de `backend/`, com o `.env` do ambiente alvo):
+
+```bash
+# o dono: admin, e fica com as contas do Instagram que ainda não têm dono
+python -m scripts.create_user --email dono@x.com --name "Arthur" --admin --claim-orphans
+# um testador
+python -m scripts.create_user --email testador@x.com --name "Fulano"
+# esqueceu a senha: gera outra temporária
+python -m scripts.create_user --email testador@x.com --reset-password
+```
+
+O script imprime uma **senha temporária, uma única vez** (mande por um canal
+privado). No primeiro acesso a pessoa é levada a trocá-la (mínimo de 10
+caracteres). `--claim-orphans` só vale com `--admin`; se houver contas sem dono
+e a flag não vier, o script avisa. A migração 0005 não cria usuário: depois de
+subir a versão com multiusuário, rode o comando do dono.
+
+### Como adicionar um testador
+
+Na ordem, **depois** do deploy:
+
+1. **Meta App** (developers.facebook.com → o app → *App roles* → *Roles*):
+   adicione a pessoa como **Instagram Tester** pelo @ do Instagram dela. Com o
+   app em modo de desenvolvimento, sem esse papel a Meta recusa o OAuth e não
+   entrega os webhooks da conta.
+2. **A pessoa**, no Instagram:
+   - a conta precisa ser **profissional** (Criador ou Empresa);
+   - aceitar o convite em *Configurações → Apps e sites → Convites de testador*
+     (no navegador: instagram.com/accounts/manage_access);
+   - em *Configurações → Mensagens → Ferramentas conectadas*, ativar **Permitir
+     acesso às mensagens** (sem isso, as DMs pela API falham).
+3. **Crie o usuário** dela com `scripts.create_user` (acima) e envie a senha temporária.
+4. Ela entra em `/login`, troca a senha, vai em **Configurações → Conectar
+   Instagram** e cria uma automação de teste (ex.: comentário com a palavra-chave
+   `TESTE` num post dela).
+
+### Saúde do token da Meta
+
+A Meta invalida o token se a conta ficar parada por ~60 dias. O backend marca a
+conta (`token_invalid_at`) quando a Meta responde com o código 190, e a tela
+mostra "Reconectar" (banner no Início, ponto vermelho no seletor de conta).
+O worker também renova, a cada ~12 h, os tokens que vencem em até 15 dias.
 
 ## Migrações (Alembic)
 
@@ -183,13 +233,15 @@ cd backend
 ```
 
 Os testes de unidade (flow, assinatura, auth, criptografia, cliente da Meta
-sem rede) rodam sem banco. Os testes da fila de webhooks precisam de um
-Postgres **descartável** (o schema é recriado a cada teste) e são pulados
-sem ele:
+sem rede) rodam sem banco. Os que usam banco (fila de webhooks, usuários,
+rotas por dono, engine, migrações) precisam de um Postgres **descartável** (o
+schema é recriado a cada teste) e são pulados sem ele. **Nunca aponte
+`TEST_DATABASE_URL` para o Supabase.** Com podman:
 
 ```bash
-createdb octus_test
-TEST_DATABASE_URL=postgresql+psycopg://postgres@localhost:5432/octus_test .venv/bin/pytest
+podman run -d --rm --name octus-test-pg -e POSTGRES_PASSWORD=test -e POSTGRES_DB=octus_test \
+  -p 127.0.0.1:55432:5432 docker.io/library/postgres:17-alpine
+TEST_DATABASE_URL=postgresql+psycopg://postgres:test@127.0.0.1:55432/octus_test .venv/bin/pytest
 ```
 
 ## Worker da fila de webhooks
@@ -208,6 +260,12 @@ e `WEBHOOK_WORKER_ENABLED=false` no serviço web.
 - **Frontend → Vercel:** root `frontend/`, variáveis da tabela do frontend.
 - **Backend → Render:** usa o `Dockerfile` (o `render.yaml` lista as
   variáveis). Deploy automático a cada push na `main`.
+- **Multiusuário (migração 0005):** o backend novo exige `X-Octus-User` e o
+  frontend antigo não manda, então **suba os dois juntos** (merge na `main`). O
+  Render roda `alembic upgrade head`. Assim que terminar, rode
+  `create_user --admin --claim-orphans` contra o banco de produção (cria o seu
+  usuário e passa as contas existentes para você) e remova `ADMIN_PASSWORD` da
+  Vercel. Enquanto isso não for feito, ninguém consegue entrar.
 - **Ordem ao adicionar variável obrigatória nova:** configure no painel
   **antes** do push — senão a migração/boot falha (o Postgres desfaz a
   migração e o deploy anterior continua no ar).
