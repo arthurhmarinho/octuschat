@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Button, Card, Field, Input } from "@/components/ui";
+import { Eye, EyeOff } from "lucide-react";
+import { Button, Card, Field, IconButton, Input } from "@/components/ui";
 
 /** Só aceita caminhos internos no `?next=` (evita open redirect). */
 function safeNext(): string {
@@ -13,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [visible, setVisible] = useState(false);
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -44,17 +46,33 @@ export default function LoginPage() {
           <p className="mb-6 mt-1 text-[13px] text-fg-2">Entre com a senha de administrador</p>
 
           <Field label="Senha" htmlFor="password">
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              autoFocus
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="relative">
+              <Input
+                id="password"
+                type={visible ? "text" : "password"}
+                autoComplete="current-password"
+                autoFocus
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={error ? true : undefined}
+                aria-describedby={error ? "login-error" : undefined}
+                className="pr-10"
+              />
+              <IconButton
+                icon={visible ? EyeOff : Eye}
+                aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
+                aria-pressed={visible}
+                onClick={() => setVisible((v) => !v)}
+                className="absolute right-1 top-1/2 -translate-y-1/2"
+              />
+            </div>
           </Field>
 
-          {error && <p className="mt-3 text-[13px] text-negative">{error}</p>}
+          {error && (
+            <p id="login-error" role="alert" className="mt-3 text-[13px] text-negative">
+              {error}
+            </p>
+          )}
 
           <Button
             type="submit"

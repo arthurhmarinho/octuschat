@@ -12,12 +12,13 @@ import {
   EmptyState,
   KeywordTokens,
   Note,
-  Spinner,
+  Skeleton,
   StatusDot,
+  cx,
 } from "@/components/ui";
 import { useAccount } from "@/lib/account";
 import { TRIGGER_TEXT, sourceLabel, type Trigger } from "@/lib/automation";
-import { formatRelative } from "@/lib/format";
+import { dayKey, formatDate, formatRelative } from "@/lib/format";
 
 type Automation = {
   id: number;
@@ -33,14 +34,38 @@ type Contact = {
   profile_pic: string | null;
   last_message_at: string | null;
 };
+type ContactRow = { first_seen: string };
 type Message = { id: number; direction: "in" | "out"; text: string; source: string; created_at: string };
 type Conversation = { contact: Contact; messages: Message[] };
 
 type Data = {
   automations: Automation[];
-  contacts: number;
+  contacts: ContactRow[];
   conversations: Conversation[];
 };
+
+const DAY = 86400000;
+const WINDOW_DAYS = 7;
+
+/** Quantos itens caem em [now-7d, now) e em [now-14d, now-7d). */
+function countWindows(dates: string[], now: number): { current: number; previous: number } {
+  let current = 0;
+  let previous = 0;
+  for (const d of dates) {
+    const age = now - new Date(d).getTime();
+    if (age < 0) continue;
+    if (age < WINDOW_DAYS * DAY) current++;
+    else if (age < 2 * WINDOW_DAYS * DAY) previous++;
+  }
+  return { current, previous };
+}
+
+/** "+3 vs 7 dias anteriores", "2 a menos vs 7 dias anteriores" ou "igual aos 7 dias anteriores". */
+function deltaText(current: number, previous: number): string {
+  const diff = current - previous;
+  if (diff === 0) return "igual aos 7 dias anteriores";
+  return diff > 0 ? `+${diff} vs 7 dias anteriores` : `${-diff} a menos vs 7 dias anteriores`;
+}
 
 const nameOf = (c: Contact) => (c.username ? `@${c.username}` : `usuário ${c.ig_user_id}`);
 
@@ -50,7 +75,17 @@ async function getJson<T>(url: string): Promise<T> {
   return r.json();
 }
 
-function Stat({ label, value, meta }: { label: string; value: number; meta?: string }) {
+function Stat({
+  label,
+  value,
+  meta,
+  note,
+}: {
+  label: string;
+  value: number;
+  meta?: string;
+  note?: string;
+}) {
   return (
     <Card className="flex flex-col gap-3">
       <p className="text-[13px] text-fg-2">{label}</p>
@@ -58,6 +93,117 @@ function Stat({ label, value, meta }: { label: string; value: number; meta?: str
         <span className="text-[28px] font-medium leading-none tabular-nums text-fg">{value}</span>
         {meta && <span className="text-[13px] text-fg-3">{meta}</span>}
       </p>
+      {note && <p className="text-xs text-fg-3">{note}</p>}
+    </Card>
+  );
+}
+
+type Day = { key: string; date: Date; sent: number; received: number };
+
+/** Mensagens por dia nos últimos 14 dias, do mais antigo ao mais recente. */
+function lastDays(conversations: Conversation[], n = 14, now = new Date()): Day[] {
+  const days: Day[] = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+    days.push({ key: dayKey(date), date, sent: 0, received: 0 });
+  }
+  const byKey = new Map(days.map((d) => [d.key, d]));
+  for (const c of conversations) {
+    for (const m of c.messages) {
+      const day = byKey.get(dayKey(m.created_at));
+      if (!day) continue;
+      if (m.direction === "out") day.sent++;
+      else day.received++;
+    }
+  }
+  return days;
+}
+
+const WEEKDAY = new Intl.DateTimeFormat("pt-BR", { weekday: "short" });
+
+/** Gráfico principal: barras empilhadas, enviadas em destaque e recebidas em cinza. */
+function Activity({ days }: { days: Day[] }) {
+  const max = Math.max(1, ...days.map((d) => d.sent + d.received));
+  const total = days.reduce((n, d) => n + d.sent + d.received, 0);
+  const H = 120;
+
+  return (
+    <Card padding="none">
+      <div className="flex h-12 items-center justify-between border-b border-line px-5">
+        <h2 className="text-[15px] font-medium text-fg">Atividade</h2>
+        <div className="flex items-center gap-4 text-xs text-fg-3">
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden className="h-2 w-2 rounded-[2px] bg-fg" />
+            Enviadas
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span aria-hidden className="h-2 w-2 rounded-[2px] bg-fg-3/60" />
+            Recebidas
+          </span>
+        </div>
+      </div>
+
+      {total === 0 ? (
+        <p className="px-5 py-10 text-center text-sm text-fg-3">
+          Nenhuma mensagem nos últimos 14 dias
+        </p>
+      ) : (
+        <div className="px-5 pb-4 pt-5">
+          <ul className="flex items-end gap-1.5 sm:gap-2" style={{ height: H }}>
+            {days.map((d, i) => {
+              const sentH = Math.round((d.sent / max) * H);
+              const recvH = Math.round((d.received / max) * H);
+              const today = i === days.length - 1;
+              return (
+                <li
+                  key={d.key}
+                  className="group relative flex h-full min-w-0 flex-1 flex-col justify-end"
+                  title={`${formatDate(d.date)}: ${d.sent} enviadas, ${d.received} recebidas`}
+                  aria-label={`${formatDate(d.date)}: ${d.sent} enviadas, ${d.received} recebidas`}
+                >
+                  {/* mínimo de 2px quando há valor, para não sumir */}
+                  {d.received > 0 && (
+                    <div
+                      className="w-full rounded-t-[3px] bg-fg-3/60 transition-colors duration-150 group-hover:bg-fg-3"
+                      style={{ height: Math.max(2, recvH) }}
+                    />
+                  )}
+                  {d.sent > 0 && (
+                    <div
+                      className={cx(
+                        "w-full bg-fg transition-opacity duration-150 group-hover:opacity-80",
+                        d.received === 0 ? "rounded-t-[3px]" : "mt-px"
+                      )}
+                      style={{ height: Math.max(2, sentH) }}
+                    />
+                  )}
+                  {d.sent + d.received === 0 && <div className="h-px w-full bg-line-strong" />}
+                </li>
+              );
+            })}
+          </ul>
+          <ul aria-hidden className="mt-2 flex gap-1.5 sm:gap-2">
+            {days.map((d, i) => {
+              const fromEnd = days.length - 1 - i;
+              // Larga: um rótulo a cada 2 dias. Estreita: a cada 4, para não cortar.
+              const cls =
+                fromEnd % 4 === 0 ? "" : fromEnd % 2 === 0 ? "invisible sm:visible" : "invisible";
+              return (
+                <li
+                  key={d.key}
+                  className={cx(
+                    "flex min-w-0 flex-1 justify-center font-mono text-[11px]",
+                    fromEnd === 0 ? "text-fg-2" : "text-fg-3",
+                    cls
+                  )}
+                >
+                  <span className="whitespace-nowrap">{WEEKDAY.format(d.date).replace(".", "")}</span>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
     </Card>
   );
 }
@@ -94,11 +240,11 @@ export default function Home() {
     const q = `account_id=${accountId}`;
     Promise.all([
       getJson<Automation[]>(`/api/backend/automations?${q}`),
-      getJson<unknown[]>(`/api/backend/contacts?${q}`),
+      getJson<ContactRow[]>(`/api/backend/contacts?${q}`),
       getJson<Conversation[]>(`/api/backend/conversations?${q}`),
     ])
       .then(([automations, contacts, conversations]) =>
-        setData({ automations, contacts: contacts.length, conversations })
+        setData({ automations, contacts, conversations })
       )
       .catch(() => setServerDown(true));
   }, [accountId]);
@@ -106,8 +252,13 @@ export default function Home() {
   if (!resolved || (accountId && !data && !serverDown)) {
     return (
       <AppShell title="Início">
-        <div className="flex justify-center py-24">
-          <Spinner />
+        <div aria-busy="true" aria-label="Carregando">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-[116px] rounded-card" />
+            ))}
+          </div>
+          <Skeleton className="mt-4 h-[236px] rounded-card" />
         </div>
       </AppShell>
     );
@@ -142,21 +293,53 @@ export default function Home() {
 
   const { automations, conversations } = data;
   const active = automations.filter((a) => a.enabled).length;
+  const now = Date.now();
+  const allMessages = conversations.flatMap((c) => c.messages);
+  const sent = countWindows(
+    allMessages.filter((m) => m.direction === "out").map((m) => m.created_at),
+    now
+  );
+  const received = countWindows(
+    allMessages.filter((m) => m.direction === "in").map((m) => m.created_at),
+    now
+  );
+  const newContacts = countWindows(data.contacts.map((c) => c.first_seen), now);
+  const days = lastDays(conversations);
   const recent = conversations.filter((c) => c.messages.length).slice(0, 6);
   const topAutomations = automations.slice(0, 6);
 
   return (
     <AppShell title="Início">
       <ConnectNotice />
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Stat label="Automações ativas" value={active} meta={`de ${automations.length}`} />
-        <Stat label="Contatos" value={data.contacts} />
-        <Stat label="Conversas" value={conversations.length} />
+        <Stat
+          label="Respostas enviadas"
+          value={sent.current}
+          meta="7 dias"
+          note={deltaText(sent.current, sent.previous)}
+        />
+        <Stat
+          label="Mensagens recebidas"
+          value={received.current}
+          meta="7 dias"
+          note={deltaText(received.current, received.previous)}
+        />
+        <Stat
+          label="Contatos novos"
+          value={newContacts.current}
+          meta="7 dias"
+          note={deltaText(newContacts.current, newContacts.previous)}
+        />
+      </div>
+
+      <div className="mt-4">
+        <Activity days={days} />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[2fr_1fr]">
         {/* Últimas conversas */}
-        <Card padding="none">
+        <Card padding="none" className="min-w-0">
           <SectionHead title="Últimas conversas" href="/conversas" />
           {recent.length === 0 ? (
             <EmptyState
@@ -195,7 +378,7 @@ export default function Home() {
         </Card>
 
         {/* Automações */}
-        <Card padding="none" className="self-start">
+        <Card padding="none" className="min-w-0 self-start">
           <SectionHead title="Automações" href="/automations" />
           {topAutomations.length === 0 ? (
             <EmptyState

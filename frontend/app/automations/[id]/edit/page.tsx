@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import AppShell from "@/components/AppShell";
-import { Note, Spinner } from "@/components/ui";
+import { Card, Note, Skeleton } from "@/components/ui";
 import AutomationForm, { type AutomationInitial } from "@/components/AutomationForm";
 
 export default function EditAutomationPage() {
@@ -43,8 +43,19 @@ export default function EditAutomationPage() {
   if (!initial) {
     return (
       <AppShell title="Editar automação">
-        <div className="flex justify-center py-24">
-          <Spinner />
+        <div aria-busy="true" aria-label="Carregando" className="grid gap-8 lg:grid-cols-[1fr_320px]">
+          <div className="space-y-8">
+            <Skeleton className="h-5 w-32" />
+            <Card className="space-y-5">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-2">
+                  <Skeleton className="h-3.5 w-20" />
+                  <Skeleton className="h-9 w-full" />
+                </div>
+              ))}
+            </Card>
+          </div>
+          <Skeleton className="hidden h-[420px] rounded-panel lg:block" />
         </div>
       </AppShell>
     );
