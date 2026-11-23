@@ -1,6 +1,7 @@
 /**
- * Sessão do admin: cookie httpOnly com `<exp>.<hmac>` assinado com
- * SESSION_SECRET. Sem estado no banco (app single-user).
+ * Sessão do usuário: cookie httpOnly com `<uid>.<exp>.<hmac>`, assinado com
+ * SESSION_SECRET sobre `<uid>.<exp>`. Sem estado no banco: quem entrou é o uid.
+ * O formato antigo (`<exp>.<hmac>`, 2 partes) é recusado: todo mundo entra de novo.
  *
  * Usa só Web Crypto, então roda tanto no middleware (edge) quanto nos
  * route handlers (node).
@@ -38,23 +39,38 @@ async function hmacKey(secret: string): Promise<CryptoKey> {
   );
 }
 
-/** Gera o valor do cookie de sessão (válido por SESSION_MAX_AGE). */
-export async function createSessionToken(secret: string): Promise<string> {
-  const exp = String(Math.floor(Date.now() / 1000) + SESSION_MAX_AGE);
-  const sig = await crypto.subtle.sign("HMAC", await hmacKey(secret), enc.encode(exp));
-  return `${exp}.${b64url(sig)}`;
+/** Gera o valor do cookie de sessão do usuário `uid` (válido por SESSION_MAX_AGE). */
+export async function createSessionToken(secret: string, uid: number): Promise<string> {
+  const exp = Math.floor(Date.now() / 1000) + SESSION_MAX_AGE;
+  const payload = `${uid}.${exp}`;
+  const sig = await crypto.subtle.sign("HMAC", await hmacKey(secret), enc.encode(payload));
+  return `${payload}.${b64url(sig)}`;
 }
 
-/** Confere assinatura (tempo constante via subtle.verify) e expiração. */
+export type Session = { uid: number };
+
+/**
+ * Confere assinatura (tempo constante via subtle.verify) e expiração.
+ * Devolve o usuário da sessão, ou null se o token for inválido, expirado
+ * ou do formato antigo.
+ */
 export async function verifySessionToken(
   token: string | undefined,
   secret: string | undefined,
-): Promise<boolean> {
-  if (!token || !secret) return false;
-  const [exp, sig] = token.split(".");
-  if (!exp || !sig || !/^\d+$/.test(exp)) return false;
-  if (Number(exp) < Math.floor(Date.now() / 1000)) return false;
+): Promise<Session | null> {
+  if (!token || !secret) return null;
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  const [uid, exp, sig] = parts;
+  if (!/^\d{1,12}$/.test(uid) || !/^\d+$/.test(exp) || !sig) return null;
+  if (Number(exp) < Math.floor(Date.now() / 1000)) return null;
   const sigBytes = fromB64url(sig);
-  if (!sigBytes) return false;
-  return crypto.subtle.verify("HMAC", await hmacKey(secret), sigBytes, enc.encode(exp));
+  if (!sigBytes) return null;
+  const ok = await crypto.subtle.verify(
+    "HMAC",
+    await hmacKey(secret),
+    sigBytes,
+    enc.encode(`${uid}.${exp}`),
+  );
+  return ok ? { uid: Number(uid) } : null;
 }

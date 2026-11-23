@@ -1,25 +1,19 @@
 /**
  * Proxy autenticado para o backend FastAPI.
  *
- * Substitui o antigo `rewrite`: confere a sessão do usuário e injeta o
- * segredo da API (BACKEND_API_SECRET) server-side — ele nunca chega ao browser.
+ * Confere a sessão e injeta, server-side, o segredo da API (BACKEND_API_SECRET)
+ * e o usuário da sessão (`X-Octus-User`). Nenhum dos dois chega ao browser, e
+ * um `X-Octus-User` enviado pelo browser nunca é repassado (só `content-type` e
+ * `accept` passam).
  */
 
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
+import { SECRET_HEADER, USER_HEADER, backendBase } from "@/lib/backend";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// Normaliza a URL do backend: remove espaços/quebras, tira "/" no fim e
-// garante o esquema https:// (evita erro se a env vier sem ele).
-function backendBase(): string {
-  let url = (process.env.BACKEND_URL || "http://localhost:8000").trim();
-  url = url.replace(/\/+$/, "");
-  if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
-  return url;
-}
 
 // Headers da request repassados ao backend.
 const FORWARD_REQ = ["content-type", "accept"];
@@ -31,8 +25,9 @@ async function proxy(
   req: NextRequest,
   { params }: { params: Promise<{ path: string[] }> },
 ) {
-  const session = (await cookies()).get(SESSION_COOKIE)?.value;
-  if (!(await verifySessionToken(session, process.env.SESSION_SECRET))) {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value;
+  const session = await verifySessionToken(token, process.env.SESSION_SECRET);
+  if (!session) {
     return NextResponse.json({ detail: "Não autenticado" }, { status: 401 });
   }
 
@@ -47,7 +42,7 @@ async function proxy(
   const { path } = await params;
   const target = `${backendBase()}/${path.map(encodeURIComponent).join("/")}${req.nextUrl.search}`;
 
-  const headers = new Headers({ "X-Octus-Secret": secret });
+  const headers = new Headers({ [SECRET_HEADER]: secret, [USER_HEADER]: String(session.uid) });
   for (const h of FORWARD_REQ) {
     const v = req.headers.get(h);
     if (v) headers.set(h, v);

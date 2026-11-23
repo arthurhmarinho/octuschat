@@ -18,11 +18,11 @@ export async function middleware(req: NextRequest) {
   const { pathname, search } = req.nextUrl;
   if (isPublic(pathname)) return NextResponse.next();
 
-  const ok = await verifySessionToken(
+  const session = await verifySessionToken(
     req.cookies.get(SESSION_COOKIE)?.value,
     process.env.SESSION_SECRET,
   );
-  if (ok) return NextResponse.next();
+  if (session) return NextResponse.next();
 
   // Chamadas de API recebem 401; páginas são redirecionadas ao login.
   if (pathname.startsWith("/api/")) {

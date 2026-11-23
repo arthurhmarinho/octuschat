@@ -78,7 +78,7 @@ export default function Home() {
   const [data, setData] = useState<Data | null>(null);
   const [serverDown, setServerDown] = useState(false);
 
-  const accountId = account && account.ig_user_id !== "demo" ? account.ig_user_id : null;
+  const accountId = account?.ig_user_id ?? null;
 
   // Servidor fora: sem conta resolvida não dá para distinguir "sem conta" de
   // "sem resposta", então testamos o health quando não há conta.
@@ -91,6 +91,7 @@ export default function Home() {
 
   useEffect(() => {
     if (!accountId) return;
+    setData(null); // trocou de conta: não mostra os dados da anterior
     const q = `account_id=${accountId}`;
     Promise.all([
       getJson<Automation[]>(`/api/backend/automations?${q}`),
@@ -129,9 +130,23 @@ export default function Home() {
         <ConnectNotice />
         <Card className="max-w-xl">
           <h2 className="text-[15px] font-medium text-fg">Conecte sua conta do Instagram</h2>
-          <p className="mb-4 mt-1 text-sm text-fg-2">
+          <p className="mt-1 text-sm text-fg-2">
             Depois de conectar, suas automações, contatos e conversas aparecem aqui.
           </p>
+          <ol className="my-4 space-y-3">
+            {[
+              "Sua conta precisa ser profissional (Criador ou Empresa)",
+              "Aceite o convite de testador em Instagram → Configurações → Apps e sites",
+              "Clique em Conectar Instagram",
+            ].map((step, i) => (
+              <li key={step} className="flex items-start gap-3 text-sm text-fg-2">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong font-mono text-xs text-fg-3">
+                  {i + 1}
+                </span>
+                {step}
+              </li>
+            ))}
+          </ol>
           <Button variant="primary" href="/api/backend/instagram/connect">
             Conectar Instagram
           </Button>
@@ -148,6 +163,19 @@ export default function Home() {
   return (
     <AppShell title="Início">
       <ConnectNotice />
+      {account?.needs_reconnect && (
+        <Note variant="warning" className="mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              O Instagram recusou o acesso de @{account.username ?? account.ig_user_id}. As
+              automações não respondem até você reconectar
+            </span>
+            <Button variant="secondary" size="sm" href="/api/backend/instagram/connect">
+              Reconectar Instagram
+            </Button>
+          </div>
+        </Note>
+      )}
       <div className="grid gap-4 sm:grid-cols-3">
         <Stat label="Automações ativas" value={active} meta={`de ${automations.length}`} />
         <Stat label="Contatos" value={data.contacts} />
