@@ -25,8 +25,15 @@ GRAPH_BASE = "https://graph.instagram.com"
 class InstagramAPIError(Exception):
     """Falha numa chamada à Graph API. A mensagem nunca contém o token."""
 
-    def __init__(self, message: str, status_code: int | None = None):
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None = None,
+        code: int | None = None,
+    ):
         self.status_code = status_code
+        # Código de erro da Meta (ex.: 190 = token inválido/expirado).
+        self.code = code
         super().__init__(redact_secrets(message))
 
 
@@ -48,8 +55,11 @@ def _check(resp: httpx.Response) -> dict:
     if resp.is_success:
         return resp.json()
     detail = ""
+    code: int | None = None
     try:
         err = resp.json().get("error") or {}
+        if isinstance(err.get("code"), int):
+            code = err["code"]
         detail = err.get("message") or ""
         if err.get("code") is not None:
             detail = f"{detail} (code {err.get('code')}"
@@ -59,7 +69,7 @@ def _check(resp: httpx.Response) -> dict:
     except ValueError:
         detail = resp.text[:300]
     raise InstagramAPIError(
-        f"HTTP {resp.status_code}: {detail or resp.reason_phrase}", resp.status_code
+        f"HTTP {resp.status_code}: {detail or resp.reason_phrase}", resp.status_code, code
     )
 
 

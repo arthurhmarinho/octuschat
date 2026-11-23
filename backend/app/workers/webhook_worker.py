@@ -30,6 +30,7 @@ from datetime import timedelta
 from app.core.database import SessionLocal
 from app.core.security import redact_secrets
 from app.crud import webhook_event as queue
+from app.services import token_service
 from app.services.send_limiter import NoLimit, SendDeferred, SendLimiter
 from app.services.webhook_events import dispatch
 
@@ -44,6 +45,7 @@ POLL_INTERVAL = 2.0  # segundos ociosos entre consultas (o webhook acorda antes)
 BATCH_SIZE = 10
 REQUEUE_EVERY = 60.0  # segundos
 PURGE_EVERY = 3600.0  # segundos
+RENEW_EVERY = 12 * 3600.0  # segundos: renovação proativa dos tokens da Meta
 
 
 def retry_delay(attempts: int) -> timedelta:
@@ -67,6 +69,8 @@ class WebhookWorker:
         self._stopping = False
         self._last_requeue = 0.0
         self._last_purge = 0.0
+        # None = ainda não rodou: a 1ª passagem renova na hora (ao subir o servidor).
+        self._last_renew: float | None = None
 
     def notify(self) -> None:
         """Acorda o worker na hora (chamado pelo endpoint após enfileirar)."""
@@ -162,6 +166,15 @@ class WebhookWorker:
                 n = await queue.purge_done(db, KEEP_DONE_FOR)
             if n:
                 logger.info("%s evento(s) antigo(s) removido(s) da fila.", n)
+        if self._last_renew is None or now - self._last_renew >= RENEW_EVERY:
+            self._last_renew = now
+            try:
+                async with self._session_factory() as db:
+                    counts = await token_service.refresh_expiring(db)
+                if any(counts.values()):
+                    logger.info("Renovação de tokens: %s", counts)
+            except Exception:  # noqa: BLE001
+                logger.exception("Falha na renovação proativa dos tokens.")
 
 
 # Instância do processo (usada pelo lifespan e pelo endpoint do webhook).

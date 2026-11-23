@@ -40,11 +40,14 @@ class FakeMeta:
         self.calls = []
         self.fail_template = False
         self.fail_all = False
+        self.fail_code = None
 
     async def private(self, ig_user_id, comment_id, text, access_token, buttons=None):
         self.calls.append(("private", comment_id, text, buttons))
         if self.fail_all or (buttons and self.fail_template):
-            raise instagram_api.InstagramAPIError("HTTP 400: template recusado", 400)
+            raise instagram_api.InstagramAPIError(
+                "HTTP 400: template recusado", 400, self.fail_code
+            )
 
     async def send(self, ig_user_id, recipient_id, text, access_token, buttons=None):
         self.calls.append(("send", recipient_id, text, buttons))
@@ -254,3 +257,24 @@ async def test_limitador_adia_antes_de_qualquer_efeito(db, meta):
     # Nada gravado: o evento será reprocessado do zero.
     assert (await db.execute(select(Message))).first() is None
     assert (await db.execute(select(Contact))).first() is None
+
+
+async def test_erro_190_da_meta_marca_a_conta_como_invalida(db, meta):
+    meta.fail_all = True
+    meta.fail_code = 190
+    await add_auto(db, graph(msg("m1", "Oi")))
+    await comment(db)
+    acc = await db.get(InstagramAccount, "acc")
+    await db.refresh(acc)
+    assert acc.token_invalid_at is not None
+    [log] = await logs(db)
+    assert log.status == "failed"
+
+
+async def test_erro_comum_da_meta_nao_marca_a_conta(db, meta):
+    meta.fail_all = True
+    await add_auto(db, graph(msg("m1", "Oi")))
+    await comment(db)
+    acc = await db.get(InstagramAccount, "acc")
+    await db.refresh(acc)
+    assert acc.token_invalid_at is None

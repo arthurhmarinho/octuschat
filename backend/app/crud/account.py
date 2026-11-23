@@ -90,3 +90,15 @@ async def get_owned(
     if account is None or account.owner_user_id != user_id:
         return None
     return account
+
+
+async def list_expiring(db: AsyncSession, before: datetime) -> list[InstagramAccount]:
+    """Contas com token que vence antes de `before` e que a Meta não recusou."""
+    result = await db.execute(
+        select(InstagramAccount).where(
+            InstagramAccount.token_expires_at.is_not(None),
+            InstagramAccount.token_expires_at < before,
+            InstagramAccount.token_invalid_at.is_(None),
+        )
+    )
+    return list(result.scalars().all())

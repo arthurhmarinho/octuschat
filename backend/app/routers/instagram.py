@@ -210,5 +210,6 @@ async def list_account_media(
         token = await token_service.get_valid_token(db, account)
         return await instagram_api.list_media(account.ig_user_id, token)
     except Exception as exc:  # noqa: BLE001
+        await token_service.note_api_error(db, account, exc)
         # Ex.: token inválido (conta demo) — frontend cai no fallback manual.
         raise HTTPException(502, f"Falha ao buscar mídia: {redact_secrets(str(exc))}")

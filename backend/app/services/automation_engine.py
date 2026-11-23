@@ -128,6 +128,7 @@ async def _run_graph(
             logger.info("Flow de '%s' parou no passo %s: %s", auto.name, i + 1, exc)
             break
         except Exception as exc:  # noqa: BLE001
+            await token_service.note_api_error(db, account, exc)
             if i == 0:
                 result.error = redact_secrets(str(exc))
                 logger.exception("Falha ao enviar a mensagem 1 de '%s': %s", auto.name, exc)
@@ -211,6 +212,7 @@ async def process_comment(
             )
             logger.info("Resposta pública enviada no comentário %s.", comment_id)
         except Exception as exc:  # noqa: BLE001
+            await token_service.note_api_error(db, account, exc)
             logger.warning("Falha na resposta pública: %s", exc)
 
     db.add(
