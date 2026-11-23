@@ -1,42 +1,42 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Loader2, Images, Image as ImageIcon, Sparkles, Plus, X, TriangleAlert } from "lucide-react";
+import { CalendarClock, Image as ImageIcon, Images, Plus, Trash2, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import DmPreview from "@/components/DmPreview";
-import FlowCanvas from "@/components/FlowCanvas";
+import FlowCanvas, { MAX_MESSAGES } from "@/components/FlowCanvas";
 import PostPicker from "@/components/PostPicker";
-import { useAccount } from "@/lib/account";
 import {
+  Button,
+  Card,
+  Field,
+  IconButton,
+  Input,
+  KeywordTokens,
+  Note,
+  Segmented,
+  Select,
+  Textarea,
+} from "@/components/ui";
+import { useAccount } from "@/lib/account";
+import { TRIGGER_TEXT, type Trigger } from "@/lib/automation";
+import {
+  cleanMessages,
   editorToGraph,
   graphToEditor,
   isLinear,
+  newNodeId,
   type EditorMessage,
   type FlowGraph,
   type GraphButton,
 } from "@/lib/flowGraph";
 
-type Trigger =
-  | "comment_any"
-  | "comment_keyword"
-  | "dm_keyword"
-  | "dm_any"
-  | "story_reply"
-  | "story_mention";
 type Scope = "all" | "specific" | "next";
-
-const TRIGGER_SHORT: Record<Trigger, string> = {
-  comment_keyword: "Comentário: palavra-chave",
-  comment_any: "Qualquer comentário",
-  dm_keyword: "DM: palavra-chave",
-  dm_any: "Qualquer DM (padrão)",
-  story_reply: "Resposta ao story",
-  story_mention: "Menção em story",
-};
-type Button = GraphButton;
 type SaveState = { kind: "idle" | "saving" | "ok" | "error"; msg?: string };
+
+const MAX_BUTTONS = 3;
+const MAX_TEXT = 1000;
 
 export type AutomationInitial = {
   name: string;
@@ -61,6 +61,43 @@ const EMPTY: AutomationInitial = {
   graph: null,
 };
 
+const urlInvalid = (b: GraphButton) => !!b.url.trim() && !/^https?:\/\//i.test(b.url.trim());
+
+/** Texto humano para uma resposta de erro da API. */
+async function describeError(res: Response): Promise<string> {
+  if (res.status === 422) {
+    try {
+      const body = await res.json();
+      const d = body?.detail;
+      const msg = Array.isArray(d) ? d[0]?.msg : typeof d === "string" ? d : null;
+      if (msg) return msg;
+    } catch {
+      /* cai no genérico */
+    }
+    return "Alguns campos estão inválidos. Revise e tente de novo";
+  }
+  if (res.status === 401 || res.status === 403) return "Sua sessão expirou. Entre de novo";
+  return "Não foi possível salvar. Tente de novo em alguns segundos";
+}
+
+function Section({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <section>
+      <h2 className="text-[15px] font-medium text-fg">{title}</h2>
+      <p className="mb-3 mt-1 text-[13px] text-fg-2">{description}</p>
+      {children}
+    </section>
+  );
+}
+
 export default function AutomationForm({
   automationId,
   initial,
@@ -69,7 +106,7 @@ export default function AutomationForm({
   initial?: AutomationInitial;
 }) {
   const router = useRouter();
-  const { accountId } = useAccount();
+  const { account, accountId } = useAccount();
   const start = initial ?? EMPTY;
   const isEdit = automationId != null;
 
@@ -80,51 +117,68 @@ export default function AutomationForm({
   const [scope, setScope] = useState<Scope>(start.scope);
   const [postId, setPostId] = useState(start.postId);
   const [publicReply, setPublicReply] = useState(start.publicReply);
-  // O editor trabalha sobre uma cadeia de mensagens (ids = ids dos nós) e os
-  // botões da mensagem 1; o grafo é montado a partir disso.
-  const [initialEditor] = useState(() => graphToEditor(start.graph));
-  const [messages, setMessages] = useState<EditorMessage[]>(initialEditor.messages);
-  const [buttons, setButtons] = useState<Button[]>(initialEditor.buttons);
-  const hasBranches = !isLinear(start.graph);
+  const [messages, setMessages] = useState<EditorMessage[]>(() => graphToEditor(start.graph).messages);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
 
-  const addButton = () =>
-    setButtons((b) => (b.length >= 3 ? b : [...b, { label: "", url: "" }]));
-  const removeButton = (i: number) =>
-    setButtons((b) => b.filter((_, idx) => idx !== i));
-  const updateButton = (i: number, field: keyof Button, value: string) =>
-    setButtons((b) => b.map((x, idx) => (idx === i ? { ...x, [field]: value } : x)));
+  // Grafo com condições: o editor não sabe editá-lo. Fica só leitura e o PATCH
+  // não envia `graph`, então os ramos nunca são sobrescritos.
+  const hasBranches = !isLinear(start.graph);
 
-  const buildGraph = (btns: Button[]) => editorToGraph(messages, btns, start.graph);
-  // Preview: botões ainda incompletos também aparecem (como antes). Com
-  // ramos, mostra o grafo salvo como está (o editor não o modifica).
-  const previewGraph = hasBranches && start.graph ? start.graph : buildGraph(buttons);
+  const selected = messages.find((m) => m.id === selectedId) ?? messages[0];
+  const selectedIndex = messages.findIndex((m) => m.id === selected.id);
+
+  const updateMessage = (id: string, patch: Partial<EditorMessage>) =>
+    setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  const addMessage = () => {
+    if (messages.length >= MAX_MESSAGES) return;
+    const m: EditorMessage = { id: newNodeId(), text: "", buttons: [] };
+    setMessages((ms) => [...ms, m]);
+    setSelectedId(m.id);
+  };
+  const removeMessage = (id: string) => {
+    if (messages.length <= 1) return;
+    const idx = messages.findIndex((m) => m.id === id);
+    const next = messages.filter((m) => m.id !== id);
+    setMessages(next);
+    if (selected.id === id) setSelectedId(next[Math.max(0, idx - 1)].id);
+  };
+  const reorder = (ids: string[]) => {
+    const byId = new Map(messages.map((m) => [m.id, m]));
+    setMessages(ids.map((id) => byId.get(id)).filter((m): m is EditorMessage => !!m));
+  };
+
+  const setButtons = (id: string, fn: (b: GraphButton[]) => GraphButton[]) =>
+    setMessages((ms) => ms.map((m) => (m.id === id ? { ...m, buttons: fn(m.buttons) } : m)));
 
   const isComment = trigger === "comment_any" || trigger === "comment_keyword";
   const isKeyword = trigger === "comment_keyword" || trigger === "dm_keyword";
   const isStoryReply = trigger === "story_reply";
-  const isStoryMention = trigger === "story_mention";
   // Story reply aceita palavra-chave OPCIONAL (vazia = qualquer resposta);
   // menção em story não tem texto, então não usa palavra-chave.
   const showKeyword = isKeyword || isStoryReply;
+  const activeKeyword = showKeyword ? keyword : "";
+
+  // Preview: botões ainda incompletos também aparecem.
+  const previewGraph = hasBranches && start.graph ? start.graph : editorToGraph(messages, start.graph);
+
+  const anyUrlInvalid = messages.some((m) => m.buttons.some(urlInvalid));
 
   async function handleSave() {
     if (!isEdit && !accountId) {
-      setSave({ kind: "error", msg: "Nenhuma conta do Instagram conectada." });
+      setSave({ kind: "error", msg: "Conecte uma conta do Instagram antes de salvar" });
       return;
     }
-    // Grafo com condições: só leitura. Nada de mensagens/botões a validar e o
-    // PATCH não envia `graph`, então os ramos ficam intactos.
-    const cleanButtons = buttons
-      .map((b) => ({ label: b.label.trim(), url: b.url.trim() }))
-      .filter((b) => b.label && b.url);
-    if (!hasBranches && cleanButtons.some((b) => !/^https?:\/\//i.test(b.url))) {
-      setSave({ kind: "error", msg: "A URL do botão precisa começar com http:// ou https://" });
-      return;
-    }
-    if (!hasBranches && !messages[0]?.text.trim()) {
-      setSave({ kind: "error", msg: "Escreva a mensagem inicial." });
-      return;
+    if (!hasBranches) {
+      if (!messages[0]?.text.trim()) {
+        setSelectedId(messages[0].id);
+        setSave({ kind: "error", msg: "Escreva a mensagem 1" });
+        return;
+      }
+      if (anyUrlInvalid) {
+        setSave({ kind: "error", msg: "A URL do botão precisa começar com http:// ou https://" });
+        return;
+      }
     }
     setSave({ kind: "saving" });
     const payload: Record<string, unknown> = {
@@ -137,7 +191,7 @@ export default function AutomationForm({
       bind_next: isComment && scope === "next",
       public_reply: isComment ? publicReply || null : null,
     };
-    if (!hasBranches) payload.graph = buildGraph(cleanButtons);
+    if (!hasBranches) payload.graph = editorToGraph(cleanMessages(messages), start.graph);
     if (!isEdit) payload.account_id = accountId;
 
     try {
@@ -150,279 +204,291 @@ export default function AutomationForm({
         }
       );
       if (res.ok) {
-        setSave({ kind: "ok", msg: "Salvo!" });
+        setSave({ kind: "ok", msg: "Salvo" });
         router.push("/automations");
       } else {
-        const body = await res.text();
-        setSave({ kind: "error", msg: `Erro ${res.status}: ${body.slice(0, 120)}` });
+        setSave({ kind: "error", msg: await describeError(res) });
       }
     } catch {
-      setSave({ kind: "error", msg: "Backend offline — o preview funciona normalmente." });
+      setSave({ kind: "error", msg: "Não foi possível salvar. Verifique a conexão" });
     }
   }
 
-  const labelCls = "mono mb-1.5 block text-xs uppercase tracking-wide text-[var(--muted)]";
-  const inputCls =
-    "w-full rounded-lg border border-[var(--border)] bg-black/30 px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[var(--gold)]";
+  const saveButton = (
+    <Button variant="primary" size="sm" onClick={handleSave} disabled={save.kind === "saving"}>
+      {save.kind === "saving" ? "Salvando" : "Salvar"}
+    </Button>
+  );
 
   return (
-    <AppShell title={isEdit ? "Editar automação" : "Nova automação"}>
-      <div className="mx-auto max-w-6xl">
-        <Link
-          href="/automations"
-          className="mb-6 inline-flex items-center gap-2 text-sm text-[var(--muted)] hover:text-white"
-        >
-          <ArrowLeft size={16} /> Voltar para automações
-        </Link>
-
-        <p className="mb-4 text-sm text-[var(--muted)]">
-          Monte o fluxo da automação no canvas: o gatilho dispara a sequência de
-          mensagens, enviadas em ordem. As configurações e o preview ficam abaixo.
-        </p>
-
-        {/* ── Canvas do flow (Fase 3) ── */}
-        <div className="mb-8">
-          <label className={labelCls}>Fluxo da automação</label>
-          <FlowCanvas
-            messages={initialEditor.messages}
-            triggerLabel={
-              showKeyword && keyword
-                ? `${TRIGGER_SHORT[trigger]}: "${keyword}"`
-                : TRIGGER_SHORT[trigger]
-            }
-            onMessagesChange={setMessages}
-            readOnly={hasBranches}
-          />
-          {hasBranches && (
-            <p className="mt-2 flex items-start gap-2 rounded-lg border border-amber-400/30 bg-amber-400/5 p-3 text-xs text-amber-400">
-              <TriangleAlert size={14} className="mt-0.5 shrink-0" />
-              Este fluxo tem condições, que ainda não podem ser editadas aqui. Você pode
-              mudar o gatilho; as mensagens ficam como estão.
-            </p>
-          )}
-        </div>
-
-        <div className="grid gap-10 md:grid-cols-2">
-          {/* ── Formulário ── */}
-          <div className="glass space-y-5 p-6">
-            <div>
-              <label className={labelCls}>Nome da automação</label>
-              <input
-                className={inputCls}
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Ex.: Promoção de lançamento"
-              />
-            </div>
-
-            <div>
-              <label className={labelCls}>Gatilho</label>
-              <select
-                className={inputCls}
-                value={trigger}
-                onChange={(e) => setTrigger(e.target.value as Trigger)}
-              >
-                <optgroup label="Comentário no post">
-                  <option value="comment_keyword">Comentário com palavra-chave</option>
-                  <option value="comment_any">Qualquer comentário</option>
-                </optgroup>
-                <optgroup label="Mensagem direta (DM)">
-                  <option value="dm_keyword">Palavra-chave na DM</option>
-                  <option value="dm_any">Qualquer DM (resposta padrão)</option>
-                </optgroup>
-                <optgroup label="Story">
-                  <option value="story_reply">Resposta ao story</option>
-                  <option value="story_mention">Menção da conta em story</option>
-                </optgroup>
-              </select>
-            </div>
-
-            {showKeyword && (
-              <div>
-                <label className={labelCls}>
-                  Palavra-chave {isStoryReply && "(opcional)"}
-                </label>
-                <input
-                  className={inputCls}
-                  value={keyword}
-                  onChange={(e) => setKeyword(e.target.value)}
-                  placeholder={isStoryReply ? "Ex.: eu quero (vazio = qualquer resposta)" : "Ex.: quero"}
+    <AppShell
+      title={isEdit ? name || "Editar automação" : "Nova automação"}
+      back={{ href: "/automations", label: "Automações" }}
+      action={saveButton}
+    >
+      <div className="grid gap-8 lg:grid-cols-[1fr_320px]">
+        <div className="min-w-0 space-y-8">
+          {/* ── Gatilho ── */}
+          <Section title="Gatilho" description="O que faz esta automação disparar">
+            <Card className="space-y-5">
+              <Field label="Nome" htmlFor="name">
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Promoção de lançamento"
                 />
-                {isStoryReply && (
-                  <p className="mt-1 text-xs text-[var(--muted)]">
-                    Deixe vazio para responder a <strong>qualquer resposta</strong> ao seu story.
-                  </p>
-                )}
-              </div>
-            )}
+              </Field>
 
-            <div>
-              <label className={labelCls}>Palavras a excluir (opcional)</label>
-              <input
-                className={inputCls}
-                value={excludeKeywords}
-                onChange={(e) => setExcludeKeywords(e.target.value)}
-                placeholder="Ex.: não, spam, ódio (separadas por vírgula)"
-              />
-              <p className="mt-1 text-xs text-[var(--muted)]">
-                Se o comentário contiver alguma dessas palavras, a automação não dispara.
-              </p>
-            </div>
+              <Field label="Gatilho" htmlFor="trigger">
+                <Select
+                  id="trigger"
+                  value={trigger}
+                  onChange={(e) => setTrigger(e.target.value as Trigger)}
+                >
+                  <optgroup label="Comentários">
+                    <option value="comment_keyword">{TRIGGER_TEXT.comment_keyword}</option>
+                    <option value="comment_any">{TRIGGER_TEXT.comment_any}</option>
+                  </optgroup>
+                  <optgroup label="Direct">
+                    <option value="dm_keyword">{TRIGGER_TEXT.dm_keyword}</option>
+                    <option value="dm_any">{TRIGGER_TEXT.dm_any}</option>
+                  </optgroup>
+                  <optgroup label="Stories">
+                    <option value="story_reply">{TRIGGER_TEXT.story_reply}</option>
+                    <option value="story_mention">{TRIGGER_TEXT.story_mention}</option>
+                  </optgroup>
+                </Select>
+              </Field>
 
-            {isComment && (
-            <div>
-              <label className={labelCls}>Aplicar em</label>
-              <div className="grid grid-cols-3 gap-3">
-                {(
-                  [
-                    { v: "all", Icon: Images, t: "Todas", d: "Qualquer post ou Reel." },
-                    { v: "specific", Icon: ImageIcon, t: "Específica", d: "Escolha um post." },
-                    { v: "next", Icon: Sparkles, t: "Próxima", d: "O próximo que você postar." },
-                  ] as const
-                ).map(({ v, Icon, t, d }) => {
-                  const active = scope === v;
-                  return (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setScope(v)}
-                      className={`rounded-lg border p-3 text-left transition-colors ${
-                        active
-                          ? "border-[var(--gold)] bg-[var(--gold)]/10"
-                          : "border-[var(--border)] hover:border-white/20"
-                      }`}
-                    >
-                      <Icon size={18} className={active ? "text-[var(--gold)]" : "text-[var(--muted)]"} />
-                      <p className="mt-2 text-sm font-medium">{t}</p>
-                      <p className="text-xs text-[var(--muted)]">{d}</p>
-                    </button>
-                  );
-                })}
-              </div>
+              {showKeyword && (
+                <Field
+                  label={isStoryReply ? "Palavra-chave (opcional)" : "Palavra-chave"}
+                  htmlFor="keyword"
+                  hint={
+                    isStoryReply
+                      ? "Deixe vazio para responder a qualquer resposta ao seu story"
+                      : "Separe várias palavras com vírgula"
+                  }
+                >
+                  <Input
+                    id="keyword"
+                    value={keyword}
+                    onChange={(e) => setKeyword(e.target.value)}
+                    placeholder="preço, valor"
+                  />
+                  {keyword.trim() && (
+                    <div className="mt-2">
+                      <KeywordTokens value={keyword} />
+                    </div>
+                  )}
+                </Field>
+              )}
 
-              {scope === "specific" && accountId && (
-                <div className="mt-3">
-                  <PostPicker accountId={accountId} value={postId} onChange={setPostId} />
+              <Field
+                label="Palavras a excluir (opcional)"
+                htmlFor="exclude"
+                hint="Se a mensagem tiver uma destas palavras, a automação não dispara"
+              >
+                <Input
+                  id="exclude"
+                  value={excludeKeywords}
+                  onChange={(e) => setExcludeKeywords(e.target.value)}
+                  placeholder="spam, cancelar"
+                />
+              </Field>
+
+              {isComment && (
+                <div>
+                  <p className="mb-2 text-[13px] font-medium text-fg-2">Aplicar em</p>
+                  <Segmented<Scope>
+                    aria-label="Aplicar em"
+                    value={scope}
+                    onChange={setScope}
+                    options={[
+                      { value: "all", label: "Todas", icon: Images },
+                      { value: "specific", label: "Específica", icon: ImageIcon },
+                      { value: "next", label: "Próxima", icon: CalendarClock },
+                    ]}
+                  />
+
+                  {scope === "specific" && accountId && (
+                    <div className="mt-3">
+                      <PostPicker accountId={accountId} value={postId} onChange={setPostId} />
+                    </div>
+                  )}
+                  {scope === "next" && (
+                    <Note className="mt-3">
+                      A automação passa a valer no próximo post ou Reel que você publicar, assim que
+                      ele receber o primeiro comentário. Dá para criar a regra antes de postar
+                    </Note>
+                  )}
                 </div>
               )}
+            </Card>
+          </Section>
 
-              {scope === "next" && (
-                <p className="mt-2 rounded-lg border border-dashed border-[var(--border)] p-3 text-xs text-[var(--muted)]">
-                  A automação vai se ativar no <strong>próximo post ou Reel</strong> que você
-                  publicar — assim que ele receber o primeiro comentário. Ideal para criar a
-                  regra antes de postar.
-                </p>
+          {/* ── Mensagens ── */}
+          <Section
+            title="Mensagens"
+            description="A sequência enviada em direct quando o gatilho dispara"
+          >
+            <div className="space-y-3">
+              <FlowCanvas
+                messages={messages}
+                selectedId={selected.id}
+                triggerLabel={TRIGGER_TEXT[trigger]}
+                triggerKeywords={activeKeyword}
+                readOnly={hasBranches}
+                onSelect={setSelectedId}
+                onReorder={reorder}
+                onAdd={addMessage}
+              />
+
+              {hasBranches ? (
+                <Note variant="warning">
+                  Este fluxo tem condições, que ainda não podem ser editadas aqui. Você pode mudar o
+                  gatilho; as mensagens ficam como estão
+                </Note>
+              ) : (
+                <>
+                  <Card className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-sm font-medium text-fg">Mensagem {selectedIndex + 1}</h3>
+                      {selectedIndex > 0 && (
+                        <IconButton
+                          icon={Trash2}
+                          tone="danger"
+                          aria-label={`Excluir mensagem ${selectedIndex + 1}`}
+                          onClick={() => removeMessage(selected.id)}
+                        />
+                      )}
+                    </div>
+
+                    <Field label="Texto" htmlFor="msg-text">
+                      <Textarea
+                        id="msg-text"
+                        rows={4}
+                        maxLength={MAX_TEXT}
+                        value={selected.text}
+                        onChange={(e) => updateMessage(selected.id, { text: e.target.value })}
+                        placeholder={selectedIndex === 0 ? "Oi! Obrigado pelo contato" : `Mensagem ${selectedIndex + 1}`}
+                      />
+                      <p className="mt-2 text-right font-mono text-xs tabular-nums text-fg-3">
+                        {selected.text.length}/{MAX_TEXT}
+                      </p>
+                    </Field>
+
+                    <div>
+                      <p className="mb-2 text-[13px] font-medium text-fg-2">Botões de link</p>
+                      <div className="space-y-2">
+                        {selected.buttons.map((b, i) => (
+                          <div key={i}>
+                            <div className="flex items-center gap-2">
+                              <Input
+                                aria-label={`Rótulo do botão ${i + 1}`}
+                                value={b.label}
+                                onChange={(e) =>
+                                  setButtons(selected.id, (bs) =>
+                                    bs.map((x, j) => (j === i ? { ...x, label: e.target.value } : x))
+                                  )
+                                }
+                                placeholder="Acessar oferta"
+                              />
+                              <Input
+                                aria-label={`URL do botão ${i + 1}`}
+                                aria-invalid={urlInvalid(b) || undefined}
+                                value={b.url}
+                                onChange={(e) =>
+                                  setButtons(selected.id, (bs) =>
+                                    bs.map((x, j) => (j === i ? { ...x, url: e.target.value } : x))
+                                  )
+                                }
+                                placeholder="https://"
+                              />
+                              <IconButton
+                                icon={X}
+                                aria-label={`Remover botão ${i + 1}`}
+                                onClick={() =>
+                                  setButtons(selected.id, (bs) => bs.filter((_, j) => j !== i))
+                                }
+                              />
+                            </div>
+                            {urlInvalid(b) && (
+                              <p className="mt-1.5 text-xs text-negative">
+                                A URL precisa começar com http:// ou https://
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon={Plus}
+                        className="mt-2 -ml-3"
+                        disabled={selected.buttons.length >= MAX_BUTTONS}
+                        onClick={() =>
+                          setButtons(selected.id, (bs) => [...bs, { label: "", url: "" }])
+                        }
+                      >
+                        Adicionar botão
+                      </Button>
+                    </div>
+                  </Card>
+
+                  {isComment && messages.length >= 2 && (
+                    <Note variant="warning">
+                      A mensagem 1 sai como resposta privada ao comentário. As seguintes só são
+                      enviadas se a pessoa tiver mandado uma DM para você nas últimas 24 horas
+                    </Note>
+                  )}
+                </>
               )}
             </div>
-            )}
+          </Section>
 
-            {!isComment && (
-              <p className="rounded-lg border border-dashed border-[var(--border)] p-3 text-xs text-[var(--muted)]">
-                {isStoryMention ? (
-                  <>
-                    Gatilho de <strong>menção em story</strong>: quando alguém mencionar sua
-                    conta em um story (o que já abre uma DM), a mensagem abaixo é enviada.
-                  </>
-                ) : isStoryReply ? (
-                  <>
-                    Gatilho de <strong>resposta ao story</strong>: quando alguém responder
-                    a um story seu{keyword ? " com a palavra-chave" : " (qualquer resposta)"}, a
-                    DM abaixo é enviada.
-                  </>
-                ) : (
-                  <>
-                    Gatilho de <strong>mensagem direta</strong>: responde quando alguém te
-                    envia uma DM {trigger === "dm_keyword" ? "com a palavra-chave" : "(qualquer mensagem)"}.
-                  </>
-                )}
-              </p>
-            )}
-
-            {isComment && (
-              <div>
-                <label className={labelCls}>Resposta pública no comentário (opcional)</label>
-                <input
-                  className={inputCls}
-                  value={publicReply}
-                  onChange={(e) => setPublicReply(e.target.value)}
-                  placeholder="Ex.: Enviei no seu direct 🚀"
-                />
-                <p className="mt-1 text-xs text-[var(--muted)]">
-                  Aparece como resposta pública no post — dá prova social e incentiva mais comentários.
-                </p>
-              </div>
-            )}
-
-            {!hasBranches && (
-            <div>
-              <label className={labelCls}>Botões de link (até 3)</label>
-              <div className="space-y-2">
-                {buttons.map((b, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input
-                      className={inputCls}
-                      value={b.label}
-                      onChange={(e) => updateButton(i, "label", e.target.value)}
-                      placeholder="Rótulo (ex.: Acessar oferta)"
-                    />
-                    <input
-                      className={inputCls}
-                      value={b.url}
-                      onChange={(e) => updateButton(i, "url", e.target.value)}
-                      placeholder="https://..."
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeButton(i)}
-                      title="Remover"
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-red-500/10 hover:text-red-400"
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              {buttons.length < 3 && (
-                <button
-                  type="button"
-                  onClick={addButton}
-                  className="mt-2 inline-flex items-center gap-1.5 text-sm text-[var(--gold)] hover:underline"
-                >
-                  <Plus size={14} /> Adicionar botão
-                </button>
-              )}
-            </div>
-            )}
-
-            <button
-              onClick={handleSave}
-              disabled={save.kind === "saving"}
-              className="btn-gold inline-flex items-center gap-2 rounded-xl px-6 py-3 disabled:opacity-60"
+          {/* ── Resposta pública ── */}
+          {isComment && (
+            <Section
+              title="Resposta pública"
+              description="Opcional. Um comentário seu abaixo do comentário original"
             >
-              {save.kind === "saving" && <Loader2 size={16} className="animate-spin" />}
-              {isEdit ? "Salvar alterações" : "Salvar automação"}
-            </button>
+              <Card>
+                <Field
+                  label="Texto"
+                  htmlFor="public-reply"
+                  hint="Publicada como resposta ao comentário, depois da DM"
+                >
+                  <Textarea
+                    id="public-reply"
+                    rows={2}
+                    value={publicReply}
+                    onChange={(e) => setPublicReply(e.target.value)}
+                    placeholder="Te mandei no direct"
+                  />
+                </Field>
+              </Card>
+            </Section>
+          )}
 
-            {save.msg && (
-              <p
-                className={
-                  save.kind === "ok"
-                    ? "text-sm text-[var(--green)]"
-                    : "text-sm text-amber-400"
-                }
-              >
-                {save.msg}
-              </p>
-            )}
-          </div>
+          <p
+            role="status"
+            className={save.kind === "error" ? "text-[13px] text-negative" : "text-[13px] text-fg-2"}
+          >
+            {save.msg}
+          </p>
+        </div>
 
-          {/* ── Preview ao vivo ── */}
-          <div className="md:sticky md:top-24 md:self-start">
-            <p className="mono mb-3 text-center text-xs uppercase tracking-[0.25em] text-[var(--muted)]">
-              Preview da DM
-            </p>
-            <DmPreview username="sua_conta" graph={previewGraph} />
-          </div>
+        {/* ── Prévia ── */}
+        <div className="lg:sticky lg:top-[72px] lg:self-start">
+          <p className="mb-3 text-[13px] text-fg-2">Prévia</p>
+          <DmPreview
+            username={account?.username ?? ""}
+            graph={previewGraph}
+            isComment={isComment}
+            selectedId={hasBranches ? null : selected.id}
+          />
         </div>
       </div>
     </AppShell>

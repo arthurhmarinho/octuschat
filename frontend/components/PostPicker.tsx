@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Check, Image as ImageIcon } from "lucide-react";
+import { Field, Input, Spinner, cx } from "@/components/ui";
 
 type Media = {
   id: string;
@@ -46,27 +47,27 @@ export default function PostPicker({
   }, [accountId]);
 
   if (state === "loading") {
-    return <p className="text-sm text-[var(--muted)]">Carregando publicações…</p>;
+    return (
+      <div className="flex items-center gap-2 text-[13px] text-fg-2">
+        <Spinner /> Carregando publicações
+      </div>
+    );
   }
 
   if (state === "empty") {
     return (
-      <div className="rounded-lg border border-dashed border-[var(--border)] p-4">
-        <p className="flex items-center gap-2 text-sm text-[var(--muted)]">
-          <ImageIcon size={15} />
-          Nenhuma publicação carregada. Quando o Instagram estiver conectado, suas
-          publicações aparecem aqui em grade para você clicar e escolher.
-        </p>
-        <label className="mono mb-1.5 mt-3 block text-xs uppercase tracking-wide text-[var(--muted)]">
-          ID da publicação (manual, por enquanto)
-        </label>
-        <input
-          className="w-full rounded-lg border border-[var(--border)] bg-black/30 px-3.5 py-2.5 text-sm outline-none transition-colors focus:border-[var(--gold)]"
+      <Field
+        label="ID da publicação"
+        htmlFor="post-id"
+        hint="Não foi possível carregar suas publicações. Cole o ID de uma publicação para continuar"
+      >
+        <Input
+          id="post-id"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="Ex.: 17912345678901234"
+          placeholder="17912345678901234"
         />
-      </div>
+      </Field>
     );
   }
 
@@ -80,21 +81,24 @@ export default function PostPicker({
             key={m.id}
             type="button"
             onClick={() => onChange(m.id)}
-            className={`relative aspect-square overflow-hidden rounded-lg border ${
-              selected ? "border-[var(--gold)] ring-2 ring-[var(--gold)]/40" : "border-[var(--border)]"
-            }`}
+            aria-pressed={selected}
+            className={cx(
+              "relative aspect-square overflow-hidden rounded-control bg-raised",
+              "transition-[box-shadow] duration-150 ease-out",
+              selected ? "ring-2 ring-fg" : "ring-1 ring-line hover:ring-line-strong"
+            )}
           >
             {thumb ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={thumb} alt={m.caption || "post"} className="h-full w-full object-cover" />
+              <img src={thumb} alt={m.caption || "Publicação"} className="h-full w-full object-cover" />
             ) : (
-              <span className="flex h-full w-full items-center justify-center bg-white/5 text-[var(--muted)]">
-                <ImageIcon size={18} />
+              <span className="flex h-full w-full items-center justify-center text-fg-3">
+                <ImageIcon size={16} strokeWidth={1.5} />
               </span>
             )}
             {selected && (
-              <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[var(--gold)] text-[#2a1e05]">
-                <Check size={12} />
+              <span className="absolute right-1.5 top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-fg text-on-fg">
+                <Check size={12} strokeWidth={2} />
               </span>
             )}
           </button>

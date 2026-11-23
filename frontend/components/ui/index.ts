@@ -10,3 +10,4 @@ export { KeywordToken, KeywordTokens } from "./KeywordToken";
 export { default as StatusDot } from "./StatusDot";
 export { default as Spinner } from "./Spinner";
 export { cx } from "./cx";
+export { default as Segmented } from "./Segmented";

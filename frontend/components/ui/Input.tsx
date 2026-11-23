@@ -23,7 +23,7 @@ export function Textarea({
   return (
     <textarea
       rows={rows}
-      className={cx(controlCls, "resize-none py-2 leading-5 [field-sizing:content]", className)}
+      className={cx(controlCls, "resize-none py-2 leading-5", className)}
       {...rest}
     />
   );

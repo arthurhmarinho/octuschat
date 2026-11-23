@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ArrowLeft,
   Bot,
   House,
   LogOut,
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import Avatar from "@/components/Avatar";
-import { IconButton, StatusDot, cx } from "@/components/ui";
+import { Button, IconButton, StatusDot, cx } from "@/components/ui";
 import { useAccount } from "@/lib/account";
 
 type NavItem = { icon: LucideIcon; label: string; href: string };
@@ -119,11 +120,14 @@ function Sidebar({ pathname }: { pathname: string }) {
 export default function AppShell({
   title,
   action,
+  back,
   fill = false,
   children,
 }: {
   title: string;
   action?: ReactNode;
+  /** Link de retorno no header (ex.: builder → Automações). */
+  back?: { href: string; label: string };
   /** Conteúdo ocupa toda a altura disponível (ex.: Conversas). */
   fill?: boolean;
   children: ReactNode;
@@ -172,6 +176,11 @@ export default function AppShell({
               onClick={() => setOpen(true)}
               className="-ml-2 md:hidden"
             />
+            {back && (
+              <Button variant="ghost" size="sm" icon={ArrowLeft} href={back.href} className="-ml-2">
+                {back.label}
+              </Button>
+            )}
             <h1 className="text-base font-medium text-fg">{title}</h1>
           </div>
           {action}

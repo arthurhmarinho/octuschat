@@ -26,8 +26,8 @@ export type FlowGraph = {
   edges: GraphEdge[];
 };
 
-/** Mensagem como o editor (canvas) a manipula: id do nó + texto. */
-export type EditorMessage = { id: string; text: string };
+/** Mensagem como o editor a manipula: id do nó + texto + botões de link. */
+export type EditorMessage = { id: string; text: string; buttons: GraphButton[] };
 
 export const newNodeId = () => `m-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -60,35 +60,44 @@ export function isLinear(graph: FlowGraph | null | undefined): boolean {
   );
 }
 
-/** Grafo → estado do editor (mensagens em ordem + botões da mensagem 1). */
+/** Grafo → estado do editor (mensagens em ordem, cada uma com seus botões). */
 export function graphToEditor(graph: FlowGraph | null | undefined): {
   messages: EditorMessage[];
-  buttons: GraphButton[];
 } {
   const msgs = linearMessages(graph);
-  if (!msgs.length) return { messages: [{ id: "m1", text: "" }], buttons: [] };
+  if (!msgs.length) return { messages: [{ id: newNodeId(), text: "", buttons: [] }] };
   return {
-    messages: msgs.map((n) => ({ id: n.id, text: n.text ?? "" })),
-    buttons: msgs[0].buttons ?? [],
+    messages: msgs.map((n) => ({
+      id: n.id,
+      text: n.text ?? "",
+      buttons: (n.buttons ?? []).map((b) => ({ ...b })),
+    })),
   };
 }
 
+/** Descarta botões incompletos (sem rótulo ou sem URL) e apara os campos. */
+export function cleanMessages(messages: EditorMessage[]): EditorMessage[] {
+  return messages.map((m) => ({
+    ...m,
+    buttons: m.buttons
+      .map((b) => ({ ...b, label: b.label.trim(), url: b.url.trim() }))
+      .filter((b) => b.label && b.url),
+  }));
+}
+
 /** Estado do editor → grafo linear. Mensagens seguintes vazias são
- * descartadas; campos que o editor não mostra (botões das mensagens
- * seguintes, posição) são preservados a partir do grafo original. */
+ * descartadas; campos que o editor não mostra (posição) são preservados a
+ * partir do grafo original. */
 export function editorToGraph(
   messages: EditorMessage[],
-  buttons: GraphButton[],
   base?: FlowGraph | null
 ): FlowGraph {
   const orig = new Map((base?.nodes ?? []).map((n) => [n.id, n]));
   const kept = messages.filter((m, i) => i === 0 || m.text.trim());
-  const nodes: GraphNode[] = kept.map((m, i) => {
+  const nodes: GraphNode[] = kept.map((m) => {
     const node: GraphNode = { ...(orig.get(m.id) ?? {}), id: m.id, type: "message", text: m.text };
-    if (i === 0) {
-      if (buttons.length) node.buttons = buttons;
-      else delete node.buttons;
-    }
+    if (m.buttons.length) node.buttons = m.buttons;
+    else delete node.buttons;
     return node;
   });
   const edges: GraphEdge[] = nodes
