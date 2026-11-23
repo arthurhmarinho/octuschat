@@ -250,7 +250,7 @@ export default function FlowCanvas({
   }, [triggerLabel, buildNodes, setNodes]);
 
   return (
-    <div className="h-[440px] w-full overflow-hidden rounded-xl border border-[var(--border)] bg-black/40">
+    <div className="octus-flow h-[440px] w-full overflow-hidden rounded-xl border border-[var(--border)] bg-black/40">
       <ReactFlow
         nodes={nodes}
         edges={edges}
