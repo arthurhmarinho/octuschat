@@ -277,3 +277,31 @@ async def test_callback_com_state_invalido_ou_antigo(world, meta_ok):
     state = auth.make_oauth_state(424242)
     r = await c.get(f"/instagram/callback?code=abc&state={state}", follow_redirects=False)
     assert r.headers["location"].endswith("?connected=error")
+
+
+# ── F.0: gatilho x primeiro nó no PATCH ───────────────────
+
+QUESTION_GRAPH = {
+    "version": 3, "start": "p", "edges": [],
+    "nodes": [{"id": "p", "type": "question", "text": "Seu e-mail?", "save_as": "email"}],
+}
+
+
+async def test_patch_nao_deixa_gatilho_de_comentario_com_pergunta_no_inicio(world):
+    c, a = world["c"], world["a"]
+    body = {"name": "dm", "trigger": "dm_any", "graph": QUESTION_GRAPH, "account_id": "a1"}
+    r = await c.post("/automations", json=body, headers=hdr(a.id))
+    assert r.status_code == 201
+    auto_id = r.json()["id"]
+    # trocar só o gatilho para comentário deixaria o início inválido
+    r = await c.patch(f"/automations/{auto_id}", json={"trigger": "comment_any"}, headers=hdr(a.id))
+    assert r.status_code == 422 and "mensagem" in r.json()["detail"]
+    # trocar só o grafo de uma automação de comentário por um início de pergunta também
+    r = await c.patch(f"/automations/{world['auto_a'].id}", json={"graph": QUESTION_GRAPH}, headers=hdr(a.id))
+    assert r.status_code == 422
+    # mas dá para trocar gatilho e grafo juntos, e para editar sem tocar nos dois
+    r = await c.patch(f"/automations/{world['auto_a'].id}",
+                      json={"trigger": "dm_any", "graph": QUESTION_GRAPH}, headers=hdr(a.id))
+    assert r.status_code == 200
+    r = await c.patch(f"/automations/{auto_id}", json={"name": "renomeada"}, headers=hdr(a.id))
+    assert r.status_code == 200

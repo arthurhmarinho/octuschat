@@ -11,7 +11,12 @@ from app.core.database import get_session
 from app.core.ownership import owned_account
 from app.models.automation import Automation
 from app.models.user import User
-from app.schemas.automation import AutomationCreate, AutomationRead, AutomationUpdate
+from app.schemas.automation import (
+    AutomationCreate,
+    AutomationRead,
+    AutomationUpdate,
+    check_start_for_trigger,
+)
 from app.services import instagram_api, token_service
 
 logger = logging.getLogger("inboxpilot.automations")
@@ -81,6 +86,18 @@ async def update_automation(
     db: AsyncSession = Depends(get_session),
 ):
     automation = await _owned_automation(automation_id, user, db)
+    # Gatilho e grafo se validam juntos: um PATCH só com o gatilho (ou só com o
+    # grafo) não pode deixar a combinação inválida.
+    if data.graph is not None or data.trigger is not None:
+        graph = data.graph.model_dump() if data.graph is not None else automation.graph
+        start = next(
+            (n for n in (graph or {}).get("nodes", []) if n.get("id") == (graph or {}).get("start")),
+            {},
+        )
+        try:
+            check_start_for_trigger(start.get("type") or "message", data.trigger or automation.trigger)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
     return await crud.automation.update(db, automation, data)
 
 
