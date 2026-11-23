@@ -10,19 +10,22 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
-from app.core.auth import make_oauth_state, require_api_secret, verify_oauth_state
+from app.core.auth import current_user, make_oauth_state, verify_oauth_state
 from app.core.config import settings
 from app.core.security import redact_secrets
 from app.core.database import get_session
+from app.core.ownership import owned_account
+from app.crud.account import AccountOwnedByOther
+from app.models.user import User
 from app.schemas.account import AccountRead
 from app.services import instagram_api, token_service
 
 logger = logging.getLogger("inboxpilot.instagram")
 router = APIRouter(prefix="/instagram", tags=["instagram"])
 
-# Todas as rotas exigem o segredo da API, exceto `/callback` (a Meta
-# redireciona o browser direto para ele; protegido pelo `state` assinado).
-PROTECTED = [Depends(require_api_secret)]
+# Todas as rotas exigem segredo + usuário (`current_user`), exceto `/callback`
+# (a Meta redireciona o browser direto para ele; protegido pelo `state`
+# assinado, que carrega o id de quem iniciou a conexão).
 
 SCOPES = ",".join(
     [
@@ -33,8 +36,8 @@ SCOPES = ",".join(
 )
 
 
-@router.get("/connect", dependencies=PROTECTED)
-async def connect():
+@router.get("/connect")
+async def connect(user: User = Depends(current_user)):
     """Redireciona para a tela de autorização da Meta.
 
     Acessado via proxy do Next (`/api/backend/instagram/connect`), que repassa
@@ -45,7 +48,7 @@ async def connect():
         "redirect_uri": settings.oauth_redirect_uri,
         "scope": SCOPES,
         "response_type": "code",
-        "state": make_oauth_state(),
+        "state": make_oauth_state(user.id),
     }
     return RedirectResponse(
         f"https://www.instagram.com/oauth/authorize?{urlencode(params)}"
@@ -61,8 +64,12 @@ async def callback(
     Rota pública: a Meta redireciona o browser para cá. O `state` assinado
     garante que o fluxo foi iniciado por nós (via `/connect` autenticado).
     """
-    if not verify_oauth_state(state):
+    owner_id = verify_oauth_state(state)
+    if owner_id is None:
         logger.warning("OAuth callback com state inválido/expirado — rejeitado.")
+        return RedirectResponse(f"{settings.frontend_url}?connected=error")
+    if await crud.user.get(db, owner_id) is None:
+        logger.warning("OAuth callback de usuário inexistente (%s) — rejeitado.", owner_id)
         return RedirectResponse(f"{settings.frontend_url}?connected=error")
     if not code:
         return RedirectResponse(f"{settings.frontend_url}?connected=error")
@@ -109,14 +116,23 @@ async def callback(
     except Exception as exc:  # noqa: BLE001
         logger.warning("Não consegui buscar o perfil: %s", exc)
 
-    await crud.account.upsert(
-        db,
-        ig_user_id=ig_user_id,
-        access_token_enc=token_service.encrypt_token(access_token),
-        username=username,
-        token_expires_at=expires_at,
-        ig_id=ig_id,
-    )
+    try:
+        account = await crud.account.upsert(
+            db,
+            ig_user_id=ig_user_id,
+            access_token_enc=token_service.encrypt_token(access_token),
+            username=username,
+            token_expires_at=expires_at,
+            ig_id=ig_id,
+            owner_user_id=owner_id,
+        )
+    except AccountOwnedByOther:
+        logger.warning("Conta IG %s já pertence a outro usuário — recusada.", ig_user_id)
+        return RedirectResponse(f"{settings.frontend_url}?connected=error&reason=owned")
+    # Token novo: some a marca de "Meta recusou o token" (código 190).
+    if account.token_invalid_at is not None:
+        account.token_invalid_at = None
+        await db.commit()
 
     # Inscreve o app nos webhooks da conta (comentários + mensagens).
     try:
@@ -129,22 +145,27 @@ async def callback(
     return RedirectResponse(f"{settings.frontend_url}?connected=ok")
 
 
-@router.get("/accounts", response_model=list[AccountRead], dependencies=PROTECTED)
-async def list_accounts(db: AsyncSession = Depends(get_session)):
-    return await crud.account.list_all(db)
+@router.get("/accounts", response_model=list[AccountRead])
+async def list_accounts(
+    user: User = Depends(current_user), db: AsyncSession = Depends(get_session)
+):
+    return await crud.account.list_by_owner(db, user.id)
 
 
-@router.get("/{account_id}/subscription", dependencies=PROTECTED)
+@router.get("/{account_id}/subscription")
 async def account_subscription(
-    account_id: str, db: AsyncSession = Depends(get_session)
+    account_id: str,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
 ):
     """Diagnóstico: campos de webhook aos quais a conta está inscrita.
 
     Também tenta (re)inscrever, retornando o resultado — útil se a inscrição
     do OAuth falhou silenciosamente.
     """
+    # Aceita o ig_user_id OU o ig_id (id do webhook), mas só se a conta for do usuário.
     account = await crud.account.get_by_any_id(db, account_id)
-    if account is None:
+    if account is None or account.owner_user_id != user.id:
         raise HTTPException(404, "Conta do Instagram não conectada")
     token = await token_service.get_valid_token(db, account)
     result: dict = {"ig_user_id": account.ig_user_id, "ig_id": account.ig_id}
@@ -177,14 +198,14 @@ async def account_subscription(
     return result
 
 
-@router.get("/{account_id}/media", dependencies=PROTECTED)
+@router.get("/{account_id}/media")
 async def list_account_media(
-    account_id: str, db: AsyncSession = Depends(get_session)
+    account_id: str,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
 ):
     """Publicações/Reels da conta — para o seletor de post no builder."""
-    account = await crud.account.get(db, account_id)
-    if account is None:
-        raise HTTPException(404, "Conta do Instagram não conectada")
+    account = await owned_account(account_id, user, db)
     try:
         token = await token_service.get_valid_token(db, account)
         return await instagram_api.list_media(account.ig_user_id, token)

@@ -49,5 +49,5 @@ async def change_password(
     try:
         await crud.user.set_password(db, user, body.new_password, must_change=False)
     except WeakPassword as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(422, str(exc)) from exc
     return user

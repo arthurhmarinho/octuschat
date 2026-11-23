@@ -4,18 +4,21 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import crud
-from app.core.auth import require_api_secret
+from app.core.auth import current_user
 from app.core.database import get_session
+from app.core.ownership import owned_account
+from app.models.user import User
 
-router = APIRouter(
-    prefix="/contacts",
-    tags=["contacts"],
-    dependencies=[Depends(require_api_secret)],
-)
+router = APIRouter(prefix="/contacts", tags=["contacts"])
 
 
 @router.get("")
-async def list_contacts(account_id: str, db: AsyncSession = Depends(get_session)):
+async def list_contacts(
+    account_id: str,
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    await owned_account(account_id, user, db)
     contacts = await crud.contact.list_by_account(db, account_id)
     return [
         {
