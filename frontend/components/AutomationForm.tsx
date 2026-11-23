@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarClock, Image as ImageIcon, Images, Plus, Trash2, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
@@ -18,6 +18,7 @@ import {
   Segmented,
   Select,
   Textarea,
+  useFeedback,
 } from "@/components/ui";
 import { useAccount } from "@/lib/account";
 import { TRIGGER_TEXT, type Trigger } from "@/lib/automation";
@@ -106,6 +107,7 @@ export default function AutomationForm({
   initial?: AutomationInitial;
 }) {
   const router = useRouter();
+  const { toast, confirm } = useFeedback();
   const { account, accountId } = useAccount();
   const start = initial ?? EMPTY;
   const isEdit = automationId != null;
@@ -120,6 +122,71 @@ export default function AutomationForm({
   const [messages, setMessages] = useState<EditorMessage[]>(() => graphToEditor(start.graph).messages);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
+
+  // ── Alterações não salvas ──
+  // A "foto" inicial é tirada no primeiro render; qualquer diferença depois dela é edição.
+  const snapshot = JSON.stringify({
+    name,
+    trigger,
+    keyword,
+    excludeKeywords,
+    scope,
+    postId,
+    publicReply,
+    messages,
+  });
+  const baseline = useRef<string | null>(null);
+  if (baseline.current === null) baseline.current = snapshot;
+  const dirty = snapshot !== baseline.current;
+  // Depois de salvar, a navegação para a lista não deve pedir confirmação.
+  const leaving = useRef(false);
+  const saveRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    if (!dirty) return;
+
+    // Fechar/recarregar a aba.
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (!leaving.current) e.preventDefault();
+    };
+    // Clique em qualquer link interno (sidebar, "Automações").
+    const onClick = async (e: MouseEvent) => {
+      if (leaving.current || e.defaultPrevented || e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!a || a.target === "_blank" || a.origin !== window.location.origin) return;
+      if (a.pathname === window.location.pathname) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const ok = await confirm({
+        title: "Sair sem salvar?",
+        description: "As alterações desta automação serão perdidas",
+        confirmLabel: "Sair sem salvar",
+        cancelLabel: "Continuar editando",
+        tone: "danger",
+      });
+      if (ok) {
+        leaving.current = true;
+        router.push(a.pathname + a.search);
+      }
+    };
+    // Ctrl/Cmd+S salva.
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        saveRef.current();
+      }
+    };
+
+    window.addEventListener("beforeunload", onBeforeUnload);
+    document.addEventListener("click", onClick, true);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      document.removeEventListener("click", onClick, true);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [dirty, confirm, router]);
 
   // Grafo com condições: o editor não sabe editá-lo. Fica só leitura e o PATCH
   // não envia `graph`, então os ramos nunca são sobrescritos.
@@ -166,17 +233,17 @@ export default function AutomationForm({
 
   async function handleSave() {
     if (!isEdit && !accountId) {
-      setSave({ kind: "error", msg: "Conecte uma conta do Instagram antes de salvar" });
+      fail("Conecte uma conta do Instagram antes de salvar");
       return;
     }
     if (!hasBranches) {
       if (!messages[0]?.text.trim()) {
         setSelectedId(messages[0].id);
-        setSave({ kind: "error", msg: "Escreva a mensagem 1" });
+        fail("Escreva a mensagem 1");
         return;
       }
       if (anyUrlInvalid) {
-        setSave({ kind: "error", msg: "A URL do botão precisa começar com http:// ou https://" });
+        fail("A URL do botão precisa começar com http:// ou https://");
         return;
       }
     }
@@ -205,19 +272,38 @@ export default function AutomationForm({
       );
       if (res.ok) {
         setSave({ kind: "ok", msg: "Salvo" });
+        leaving.current = true;
+        toast(isEdit ? "Automação salva" : "Automação criada");
         router.push("/automations");
       } else {
-        setSave({ kind: "error", msg: await describeError(res) });
+        fail(await describeError(res));
       }
     } catch {
-      setSave({ kind: "error", msg: "Não foi possível salvar. Verifique a conexão" });
+      fail("Não foi possível salvar. Verifique a conexão");
     }
+  }
+  saveRef.current = () => {
+    if (save.kind !== "saving") void handleSave();
+  };
+
+  /** Erro no estado do formulário e num aviso, já que o texto fixo fica no fim da página. */
+  function fail(msg: string) {
+    setSave({ kind: "error", msg });
+    toast(msg, "error");
   }
 
   const saveButton = (
-    <Button variant="primary" size="sm" onClick={handleSave} disabled={save.kind === "saving"}>
-      {save.kind === "saving" ? "Salvando" : "Salvar"}
-    </Button>
+    <div className="flex items-center gap-3">
+      {dirty && save.kind !== "saving" && (
+        <span className="hidden items-center gap-2 text-[13px] text-fg-3 sm:flex">
+          <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-warning" />
+          Alterações não salvas
+        </span>
+      )}
+      <Button variant="primary" size="sm" onClick={handleSave} disabled={save.kind === "saving"}>
+        {save.kind === "saving" ? "Salvando" : "Salvar"}
+      </Button>
+    </div>
   );
 
   return (
@@ -473,7 +559,6 @@ export default function AutomationForm({
           )}
 
           <p
-            role="status"
             className={save.kind === "error" ? "text-[13px] text-negative" : "text-[13px] text-fg-2"}
           >
             {save.msg}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Pencil, Plus, Trash2, Workflow } from "lucide-react";
+import { Plus, Trash2, Workflow } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import {
   Button,
@@ -11,9 +11,10 @@ import {
   IconButton,
   KeywordTokens,
   Note,
-  Spinner,
+  SkeletonRows,
   Toggle,
   cx,
+  useFeedback,
 } from "@/components/ui";
 import { useAccount } from "@/lib/account";
 import { TRIGGER_TEXT, type Trigger } from "@/lib/automation";
@@ -49,6 +50,7 @@ function messageCount(a: Automation): number {
 
 export default function AutomationsPage() {
   const { accountId, resolved } = useAccount();
+  const { toast, confirm } = useFeedback();
   const [items, setItems] = useState<Automation[]>([]);
   const [state, setState] = useState<LoadState>("loading");
   const [busy, setBusy] = useState<number | null>(null);
@@ -76,20 +78,32 @@ export default function AutomationsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: !a.enabled }),
       });
-      if (res.ok) {
-        setItems((prev) => prev.map((x) => (x.id === a.id ? { ...x, enabled: !x.enabled } : x)));
-      }
+      if (!res.ok) throw new Error();
+      setItems((prev) => prev.map((x) => (x.id === a.id ? { ...x, enabled: !x.enabled } : x)));
+      toast(a.enabled ? "Automação pausada" : "Automação ativada");
+    } catch {
+      toast("Não foi possível alterar a automação. Tente de novo", "error");
     } finally {
       setBusy(null);
     }
   }
 
   async function remove(a: Automation) {
-    if (!confirm(`Excluir a automação "${a.name || "Sem nome"}"? Isso não pode ser desfeito.`)) return;
+    const ok = await confirm({
+      title: `Excluir "${a.name || "Sem nome"}"?`,
+      description: "A automação para de responder e o histórico dela não pode ser recuperado",
+      confirmLabel: "Excluir",
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusy(a.id);
     try {
       const res = await fetch(`/api/backend/automations/${a.id}`, { method: "DELETE" });
-      if (res.ok) setItems((prev) => prev.filter((x) => x.id !== a.id));
+      if (!res.ok) throw new Error();
+      setItems((prev) => prev.filter((x) => x.id !== a.id));
+      toast("Automação excluída");
+    } catch {
+      toast("Não foi possível excluir a automação. Tente de novo", "error");
     } finally {
       setBusy(null);
     }
@@ -104,9 +118,9 @@ export default function AutomationsPage() {
   return (
     <AppShell title="Automações" action={newButton}>
       {state === "loading" && (
-        <div className="flex justify-center py-24">
-          <Spinner />
-        </div>
+        <Card padding="none">
+          <SkeletonRows rows={4} avatar={false} />
+        </Card>
       )}
 
       {state === "error" && (
@@ -132,6 +146,14 @@ export default function AutomationsPage() {
 
       {state === "ready" && items.length > 0 && (
         <Card padding="none">
+          {/* Cabeçalho das colunas: mesmas larguras das linhas, só onde elas aparecem */}
+          <div className="hidden h-9 items-center gap-x-6 border-b border-line px-4 text-xs text-fg-3 md:flex">
+            <span className="min-w-[220px] flex-1">Automação</span>
+            <span className="hidden w-44 lg:block">Publicação</span>
+            <span className="w-24">Conteúdo</span>
+            <span className="w-28">Status</span>
+            <span className="w-8" aria-hidden />
+          </div>
           <ul>
             {items.map((a) => {
               const n = messageCount(a);
@@ -139,12 +161,19 @@ export default function AutomationsPage() {
                 <li
                   key={a.id}
                   className={cx(
-                    "flex min-h-16 flex-wrap items-center gap-x-6 gap-y-2 border-b border-line px-4 py-3 last:border-b-0",
+                    "relative flex min-h-16 flex-wrap items-center gap-x-6 gap-y-2 border-b border-line px-4 py-3 last:border-b-0",
+                    "transition-colors duration-150 ease-out hover:bg-raised/40",
                     busy === a.id && "opacity-50"
                   )}
                 >
                   <div className="min-w-[220px] flex-1">
-                    <p className="truncate text-sm font-medium text-fg">{a.name || "Sem nome"}</p>
+                    {/* Link esticado: a linha inteira abre o editor; toggle e excluir ficam acima (z-10) */}
+                    <Link
+                      href={`/automations/${a.id}/edit`}
+                      className="block truncate rounded-sm text-sm font-medium text-fg after:absolute after:inset-0 after:content-['']"
+                    >
+                      {a.name || "Sem nome"}
+                    </Link>
                     <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-fg-2">
                       {TRIGGER_TEXT[a.trigger]}
                       {hasKeyword(a) && <KeywordTokens value={a.keyword} />}
@@ -157,7 +186,7 @@ export default function AutomationsPage() {
                     {n} {n === 1 ? "mensagem" : "mensagens"}
                   </p>
 
-                  <div className="flex w-28 items-center gap-2">
+                  <div className="relative z-10 flex w-28 items-center gap-2">
                     <Toggle
                       checked={a.enabled}
                       onChange={() => toggleEnabled(a)}
@@ -167,22 +196,14 @@ export default function AutomationsPage() {
                     <span className="text-[13px] text-fg-2">{a.enabled ? "Ativa" : "Pausada"}</span>
                   </div>
 
-                  <div className="flex items-center gap-1">
-                    <Link
-                      href={`/automations/${a.id}/edit`}
-                      aria-label="Editar"
-                      className="inline-flex h-8 w-8 items-center justify-center rounded-control text-fg-3 transition-[background-color,color] duration-150 ease-out hover:bg-raised hover:text-fg"
-                    >
-                      <Pencil size={16} strokeWidth={1.5} />
-                    </Link>
-                    <IconButton
-                      icon={Trash2}
-                      tone="danger"
-                      aria-label="Excluir"
-                      onClick={() => remove(a)}
-                      disabled={busy === a.id}
-                    />
-                  </div>
+                  <IconButton
+                    icon={Trash2}
+                    tone="danger"
+                    aria-label={`Excluir ${a.name || "automação sem nome"}`}
+                    onClick={() => remove(a)}
+                    disabled={busy === a.id}
+                    className="relative z-10"
+                  />
                 </li>
               );
             })}

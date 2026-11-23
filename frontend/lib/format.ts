@@ -47,3 +47,22 @@ export function formatRelative(
   if (d >= startOfYesterday) return "ontem";
   return formatDate(d);
 }
+
+/** Separador de dia em conversas: "Hoje", "Ontem" ou "12 nov". */
+export function formatDay(
+  v: string | number | Date | null | undefined,
+  now: Date = new Date()
+): string {
+  const d = toDate(v);
+  if (!d) return "—";
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (d >= startOfToday) return "Hoje";
+  if (d >= new Date(startOfToday.getTime() - 86400000)) return "Ontem";
+  return formatDate(d);
+}
+
+/** Chave estável do dia local, para agrupar mensagens. */
+export const dayKey = (v: string | number | Date): string => {
+  const d = new Date(v);
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+};

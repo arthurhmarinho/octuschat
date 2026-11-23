@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { Search, Users, X } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import Avatar from "@/components/Avatar";
-import { Card, EmptyState, Note, Spinner } from "@/components/ui";
+import { Card, EmptyState, IconButton, Input, Note, SkeletonRows } from "@/components/ui";
 import { useAccount } from "@/lib/account";
 import { formatDateTime } from "@/lib/format";
 
@@ -22,6 +23,7 @@ export default function ContatosPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     if (!resolved) return;
@@ -36,18 +38,28 @@ export default function ContatosPage() {
       .finally(() => setLoading(false));
   }, [accountId, resolved]);
 
+  const shown = useMemo(() => {
+    const q = query.trim().replace(/^@/, "").toLowerCase();
+    if (!q) return contacts;
+    return contacts.filter(
+      (c) => (c.username ?? "").toLowerCase().includes(q) || c.ig_user_id.includes(q)
+    );
+  }, [contacts, query]);
+
   const count = (
     <span className="font-mono text-xs text-fg-3">
-      {contacts.length} {contacts.length === 1 ? "contato" : "contatos"}
+      {query.trim() && shown.length !== contacts.length
+        ? `${shown.length} de ${contacts.length}`
+        : `${contacts.length} ${contacts.length === 1 ? "contato" : "contatos"}`}
     </span>
   );
 
   return (
     <AppShell title="Contatos" action={!loading && contacts.length > 0 ? count : undefined}>
       {loading && (
-        <div className="flex justify-center py-24">
-          <Spinner />
-        </div>
+        <Card padding="none">
+          <SkeletonRows rows={6} />
+        </Card>
       )}
 
       {!loading && error && (
@@ -67,39 +79,88 @@ export default function ContatosPage() {
       )}
 
       {!loading && !error && contacts.length > 0 && (
-        <Card padding="none" className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead>
-              <tr className="h-9 border-b border-line text-left text-xs text-fg-3">
-                <th className="px-5 font-normal">Contato</th>
-                <th className="px-5 font-normal">ID do Instagram</th>
-                <th className="px-5 text-right font-normal">Primeiro contato</th>
-                <th className="px-5 text-right font-normal">Última mensagem</th>
-              </tr>
-            </thead>
-            <tbody>
-              {contacts.map((c) => (
-                <tr key={c.id} className="h-12 border-b border-line last:border-b-0">
-                  <td className="px-5">
-                    <div className="flex items-center gap-3">
-                      <Avatar src={c.profile_pic} name={c.username || c.ig_user_id} size={28} />
-                      <span className="text-sm text-fg">
-                        {c.username ? `@${c.username}` : `usuário ${c.ig_user_id}`}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-5 font-mono text-xs text-fg-3">{c.ig_user_id}</td>
-                  <td className="px-5 text-right font-mono text-xs text-fg-3">
-                    {formatDateTime(c.first_seen)}
-                  </td>
-                  <td className="px-5 text-right font-mono text-xs text-fg-3">
-                    {formatDateTime(c.last_message_at)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Card>
+        <div className="space-y-4">
+          <div className="relative max-w-sm">
+            <Search
+              size={16}
+              strokeWidth={1.5}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-fg-3"
+            />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Buscar contato"
+              aria-label="Buscar contato por usuário ou ID"
+              className="px-9 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {query && (
+              <IconButton
+                icon={X}
+                aria-label="Limpar busca"
+                onClick={() => setQuery("")}
+                className="absolute right-1 top-1/2 -translate-y-1/2"
+              />
+            )}
+          </div>
+
+          {shown.length === 0 ? (
+            <Card padding="none">
+              <EmptyState
+                icon={Search}
+                title="Nenhum contato encontrado"
+                description={`Nada corresponde a "${query.trim()}"`}
+              />
+            </Card>
+          ) : (
+            <Card padding="none" className="overflow-x-auto">
+              <table className="w-full min-w-[640px] table-fixed text-sm">
+                <colgroup>
+                  <col className="w-[34%]" />
+                  <col className="w-[22%]" />
+                  <col />
+                  <col />
+                </colgroup>
+                <thead>
+                  <tr className="h-9 border-b border-line text-left text-xs text-fg-3">
+                    <th className="px-5 font-normal">Contato</th>
+                    <th className="px-5 font-normal">ID do Instagram</th>
+                    <th className="px-5 text-right font-normal">Primeiro contato</th>
+                    <th className="px-5 text-right font-normal">Última mensagem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {shown.map((c) => (
+                    <tr
+                      key={c.id}
+                      className="relative h-12 border-b border-line transition-colors duration-150 ease-out last:border-b-0 hover:bg-raised/40"
+                    >
+                      <td className="px-5">
+                        <div className="flex items-center gap-3">
+                          <Avatar src={c.profile_pic} name={c.username || c.ig_user_id} size={28} />
+                          {/* Link esticado: a linha abre a conversa com este contato */}
+                          <Link
+                            href={`/conversas?c=${c.id}`}
+                            className="rounded-sm text-sm text-fg after:absolute after:inset-0 after:content-['']"
+                          >
+                            {c.username ? `@${c.username}` : `usuário ${c.ig_user_id}`}
+                          </Link>
+                        </div>
+                      </td>
+                      <td className="px-5 font-mono text-xs text-fg-3">{c.ig_user_id}</td>
+                      <td className="px-5 text-right font-mono text-xs text-fg-3">
+                        {formatDateTime(c.first_seen)}
+                      </td>
+                      <td className="px-5 text-right font-mono text-xs text-fg-3">
+                        {formatDateTime(c.last_message_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+        </div>
       )}
     </AppShell>
   );
