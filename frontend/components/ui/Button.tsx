@@ -53,6 +53,14 @@ export default function Button({
     </>
   );
   if (href && !rest.disabled) {
+    // Rotas /api/* redirecionam para fora (ex.: OAuth): navegação normal.
+    if (href.startsWith("/api/")) {
+      return (
+        <a href={href} className={cls}>
+          {content}
+        </a>
+      );
+    }
     return (
       <Link href={href} className={cls}>
         {content}
