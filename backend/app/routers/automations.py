@@ -1,6 +1,7 @@
 """CRUD de automações (regras de comentário → mensagem)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import logging
@@ -10,7 +11,9 @@ from app.core.auth import current_user
 from app.core.database import get_session
 from app.core.ownership import owned_account
 from app.models.automation import Automation
+from app.models.contact import Contact
 from app.models.user import User
+from app.schemas.flow_run import FlowRunRead, RunContact
 from app.schemas.automation import (
     AutomationCreate,
     AutomationRead,
@@ -109,3 +112,41 @@ async def delete_automation(
 ):
     automation = await _owned_automation(automation_id, user, db)
     await crud.automation.delete(db, automation)
+
+
+@router.get("/{automation_id}/runs", response_model=list[FlowRunRead])
+async def list_runs(
+    automation_id: int,
+    limit: int = Query(50, ge=1, le=200),
+    user: User = Depends(current_user),
+    db: AsyncSession = Depends(get_session),
+):
+    """Log de execuções da automação: onde cada contato parou. Só leitura."""
+    await _owned_automation(automation_id, user, db)
+    runs = await crud.flow_run.list_by_automation(db, automation_id, limit)
+    ids = {r.contact_id for r in runs}
+    contacts = {}
+    if ids:
+        rows = await db.execute(select(Contact).where(Contact.id.in_(ids)))
+        contacts = {c.id: c for c in rows.scalars()}
+    out = []
+    for r in runs:
+        c = contacts.get(r.contact_id)
+        out.append(
+            FlowRunRead(
+                id=r.id,
+                contact=RunContact(
+                    username=c.username if c else None,
+                    profile_pic=c.profile_pic if c else None,
+                ),
+                status=r.status,
+                current_node_id=r.current_node_id,
+                waiting_for=r.waiting_for,
+                resume_at=r.resume_at,
+                last_error=r.last_error,
+                created_at=r.created_at,
+                updated_at=r.updated_at,
+                vars={k: str(v) for k, v in ((r.context or {}).get("vars") or {}).items()},
+            )
+        )
+    return out

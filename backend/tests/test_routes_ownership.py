@@ -305,3 +305,29 @@ async def test_patch_nao_deixa_gatilho_de_comentario_com_pergunta_no_inicio(worl
     assert r.status_code == 200
     r = await c.patch(f"/automations/{auto_id}", json={"name": "renomeada"}, headers=hdr(a.id))
     assert r.status_code == 200
+
+
+# ── F.6: log de execuções ─────────────────────────────────
+
+
+async def test_log_de_execucoes_so_do_dono_e_com_variaveis(world):
+    c, a, b = world["c"], world["a"], world["b"]
+    async with world["sessions"]() as db:
+        contact = await crud.contact.upsert(db, "a1", "9100", username="cliente")
+        run = await crud.flow_run.create(
+            db, automation_id=world["auto_a"].id, account_id="a1", contact_id=contact.id,
+            graph=GRAPH, context={"vars": {"email": "ana@x.com"}}, current_node_id="m1")
+        await crud.flow_run.save(db, run, status="waiting", waiting_for="reply")
+    r = await c.get(f"/automations/{world['auto_a'].id}/runs", headers=hdr(a.id))
+    assert r.status_code == 200
+    [item] = r.json()
+    assert item["contact"]["username"] == "cliente" and item["status"] == "waiting"
+    assert item["current_node_id"] == "m1" and item["vars"] == {"email": "ana@x.com"}
+    # B não enxerga a automação de A (404), nem o log dela
+    assert (await c.get(f"/automations/{world['auto_a'].id}/runs", headers=hdr(b.id))).status_code == 404
+    # sem login: 401; limite fora da faixa: 422
+    assert (await c.get(f"/automations/{world['auto_a'].id}/runs", headers=hdr(None))).status_code == 401
+    assert (await c.get(f"/automations/{world['auto_a'].id}/runs?limit=0", headers=hdr(a.id))).status_code == 422
+    # automação sem execuções devolve lista vazia
+    r = await c.get(f"/automations/{world['auto_b'].id}/runs", headers=hdr(b.id))
+    assert r.status_code == 200 and r.json() == []
