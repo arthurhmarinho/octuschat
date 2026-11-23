@@ -29,6 +29,7 @@ from datetime import timedelta
 
 from app.core.database import SessionLocal
 from app.core.security import redact_secrets
+from app.crud import flow_run as flow_runs
 from app.crud import webhook_event as queue
 from app.services import token_service
 from app.services.send_limiter import NoLimit, SendDeferred, SendLimiter
@@ -41,6 +42,7 @@ MAX_ATTEMPTS = 3
 RETRY_DELAYS = (timedelta(seconds=30), timedelta(minutes=2))
 STALE_AFTER = timedelta(minutes=5)
 KEEP_DONE_FOR = timedelta(days=14)
+KEEP_FLOW_RUNS_FOR = timedelta(days=30)
 POLL_INTERVAL = 2.0  # segundos ociosos entre consultas (o webhook acorda antes)
 BATCH_SIZE = 10
 REQUEUE_EVERY = 60.0  # segundos
@@ -160,12 +162,20 @@ class WebhookWorker:
                 n = await queue.requeue_stale(db, STALE_AFTER)
             if n:
                 logger.warning("%s evento(s) preso(s) em processing voltaram à fila.", n)
+            async with self._session_factory() as db:
+                n = await flow_runs.requeue_stale(db, STALE_AFTER)
+            if n:
+                logger.warning("%s execução(ões) de flow presa(s) voltaram a esperar.", n)
         if now - self._last_purge >= PURGE_EVERY:
             self._last_purge = now
             async with self._session_factory() as db:
                 n = await queue.purge_done(db, KEEP_DONE_FOR)
             if n:
                 logger.info("%s evento(s) antigo(s) removido(s) da fila.", n)
+            async with self._session_factory() as db:
+                n = await flow_runs.purge_finished(db, KEEP_FLOW_RUNS_FOR)
+            if n:
+                logger.info("%s execução(ões) de flow antiga(s) removida(s).", n)
         if self._last_renew is None or now - self._last_renew >= RENEW_EVERY:
             self._last_renew = now
             try:
