@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { Lock, Send } from "lucide-react";
+import { Button, Card, Field, Input } from "@/components/ui";
 
 /** Só aceita caminhos internos no `?next=` (evita open redirect). */
 function safeNext(): string {
@@ -29,50 +29,43 @@ export default function LoginPage() {
         return;
       }
       const data = await res.json().catch(() => ({}));
-      setError(data.detail || "Não foi possível entrar.");
+      setError(data.detail || "Senha incorreta");
     } catch {
-      setError("Não foi possível entrar.");
+      setError("Não foi possível entrar. Verifique a conexão");
     }
     setLoading(false);
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <form onSubmit={onSubmit} className="glass w-full max-w-sm px-6 py-8">
-        <div className="mb-6 flex flex-col items-center text-center">
-          <span className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-[#f8d987] to-[var(--gold-deep)] text-[#2a1e05]">
-            <Send size={18} />
-          </span>
-          <h1 className="text-lg font-semibold tracking-tight">Octus Chat</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">Entre com a senha de administrador.</p>
-        </div>
+    <main className="flex min-h-screen items-center justify-center bg-bg px-4">
+      <Card padding="none" className="w-full max-w-[360px] rounded-panel p-6">
+        <form onSubmit={onSubmit}>
+          <h1 className="text-base font-medium text-fg">Octus Chat</h1>
+          <p className="mb-6 mt-1 text-[13px] text-fg-2">Entre com a senha de administrador</p>
 
-        <label className="mb-1.5 block text-xs font-medium text-[var(--muted)]" htmlFor="password">
-          Senha
-        </label>
-        <div className="relative">
-          <Lock size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]" />
-          <input
-            id="password"
-            type="password"
-            autoComplete="current-password"
-            autoFocus
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full rounded-lg border border-[var(--border)] bg-black/30 py-2.5 pl-9 pr-3.5 text-sm outline-none transition-colors focus:border-[var(--gold)]"
-          />
-        </div>
+          <Field label="Senha" htmlFor="password">
+            <Input
+              id="password"
+              type="password"
+              autoComplete="current-password"
+              autoFocus
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </Field>
 
-        {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
+          {error && <p className="mt-3 text-[13px] text-negative">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading || !password}
-          className="btn-gold mt-5 w-full rounded-lg py-2.5 text-sm disabled:opacity-60"
-        >
-          {loading ? "Entrando…" : "Entrar"}
-        </button>
-      </form>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={loading || !password}
+            className="mt-5 w-full"
+          >
+            {loading ? "Entrando" : "Entrar"}
+          </Button>
+        </form>
+      </Card>
     </main>
   );
 }

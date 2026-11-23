@@ -8,15 +8,15 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: { deep: "var(--bg-deep)", DEFAULT: "var(--bg)" },
-        card: "var(--card)",
-        raised: "var(--raised)",
+        bg: { deep: "rgb(var(--bg-deep-rgb) / <alpha-value>)", DEFAULT: "rgb(var(--bg-rgb) / <alpha-value>)" },
+        card: "rgb(var(--card-rgb) / <alpha-value>)",
+        raised: "rgb(var(--raised-rgb) / <alpha-value>)",
         line: { DEFAULT: "var(--line)", strong: "var(--line-strong)" },
-        fg: { DEFAULT: "var(--fg)", 2: "var(--fg-2)", 3: "var(--fg-3)" },
-        "on-fg": "var(--on-fg)",
-        positive: "var(--positive)",
-        negative: "var(--negative)",
-        warning: "var(--warning)",
+        fg: { DEFAULT: "rgb(var(--fg-rgb) / <alpha-value>)", 2: "rgb(var(--fg-2-rgb) / <alpha-value>)", 3: "rgb(var(--fg-3-rgb) / <alpha-value>)" },
+        "on-fg": "rgb(var(--on-fg-rgb) / <alpha-value>)",
+        positive: "rgb(var(--positive-rgb) / <alpha-value>)",
+        negative: "rgb(var(--negative-rgb) / <alpha-value>)",
+        warning: "rgb(var(--warning-rgb) / <alpha-value>)",
       },
       borderRadius: {
         sm: "4px",

@@ -32,7 +32,7 @@ export default function Avatar({
 
   return (
     <span
-      className="flex shrink-0 items-center justify-center rounded-full bg-gradient-to-tr from-yellow-400 via-pink-500 to-purple-600 font-bold text-white"
+      className="flex shrink-0 items-center justify-center rounded-full bg-raised font-medium text-fg-2"
       style={{ width: size, height: size, fontSize: size * 0.4 }}
     >
       {initial}

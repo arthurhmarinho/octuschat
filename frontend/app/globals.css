@@ -3,19 +3,30 @@
 @tailwind utilities;
 
 :root {
-  --bg-deep: #0f0f10;
-  --bg: #141415;
-  --card: #19191b;
-  --raised: #232325;
+  --bg-deep-rgb: 15 15 16;
+  --bg-deep: rgb(var(--bg-deep-rgb));
+  --bg-rgb: 20 20 21;
+  --bg: rgb(var(--bg-rgb));
+  --card-rgb: 25 25 27;
+  --card: rgb(var(--card-rgb));
+  --raised-rgb: 35 35 37;
+  --raised: rgb(var(--raised-rgb));
   --line: rgba(237, 237, 237, 0.08);
   --line-strong: rgba(237, 237, 237, 0.14);
-  --fg: #ededed;
-  --fg-2: #a1a1a6;
-  --fg-3: #85858b;
-  --on-fg: #141415;
-  --positive: #4cc38a;
-  --negative: #e5484d;
-  --warning: #d6a54a;
+  --fg-rgb: 237 237 237;
+  --fg: rgb(var(--fg-rgb));
+  --fg-2-rgb: 161 161 166;
+  --fg-2: rgb(var(--fg-2-rgb));
+  --fg-3-rgb: 133 133 139;
+  --fg-3: rgb(var(--fg-3-rgb));
+  --on-fg-rgb: 20 20 21;
+  --on-fg: rgb(var(--on-fg-rgb));
+  --positive-rgb: 76 195 138;
+  --positive: rgb(var(--positive-rgb));
+  --negative-rgb: 229 72 77;
+  --negative: rgb(var(--negative-rgb));
+  --warning-rgb: 214 165 74;
+  --warning: rgb(var(--warning-rgb));
 }
 
 * {
@@ -33,7 +44,8 @@ body {
   background: rgba(237, 237, 237, 0.2);
 }
 
-:focus-visible {
+/* Especificidade zero: controles com `outline-none` + ring próprio vencem. */
+:where(:focus-visible) {
   outline: 2px solid rgba(237, 237, 237, 0.5);
   outline-offset: 2px;
 }
