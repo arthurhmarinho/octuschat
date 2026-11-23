@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { Users } from "lucide-react";
 import AppShell from "@/components/AppShell";
 import Avatar from "@/components/Avatar";
+import { Card, EmptyState, Note, Spinner } from "@/components/ui";
 import { useAccount } from "@/lib/account";
+import { formatDateTime } from "@/lib/format";
 
 type Contact = {
   id: number;
@@ -19,6 +21,7 @@ export default function ContatosPage() {
   const { accountId, resolved } = useAccount();
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!resolved) return;
@@ -29,63 +32,75 @@ export default function ContatosPage() {
     fetch(`/api/backend/contacts?account_id=${accountId}`)
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data: Contact[]) => setContacts(data))
-      .catch(() => setContacts([]))
+      .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [accountId, resolved]);
 
-  const fmt = (d: string | null) => (d ? new Date(d).toLocaleString("pt-BR") : "—");
-
-  if (!loading && contacts.length === 0) {
-    return (
-      <AppShell title="Contatos">
-        <div className="glass flex flex-col items-center justify-center px-6 py-20 text-center">
-          <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--gold)]/10 text-[var(--gold)]">
-            <Users size={26} />
-          </span>
-          <h3 className="text-lg font-semibold">Nenhum contato ainda</h3>
-          <p className="mt-1 max-w-sm text-sm text-[var(--muted)]">
-            Pessoas que comentarem ou enviarem DM viram contatos automaticamente.
-            Conecte o Instagram para começar a capturar.
-          </p>
-        </div>
-      </AppShell>
-    );
-  }
+  const count = (
+    <span className="font-mono text-xs text-fg-3">
+      {contacts.length} {contacts.length === 1 ? "contato" : "contatos"}
+    </span>
+  );
 
   return (
-    <AppShell title="Contatos">
-      <div className="mb-4 text-sm text-[var(--muted)]">
-        {contacts.length} contato{contacts.length === 1 ? "" : "s"}
-      </div>
-      <div className="glass overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-[var(--border)] text-left text-xs uppercase tracking-wide text-[var(--muted)]">
-              <th className="px-5 py-3 font-medium">Contato</th>
-              <th className="px-5 py-3 font-medium">IGSID</th>
-              <th className="px-5 py-3 font-medium">Primeiro contato</th>
-              <th className="px-5 py-3 font-medium">Última mensagem</th>
-            </tr>
-          </thead>
-          <tbody>
-            {contacts.map((c) => (
-              <tr key={c.id} className="border-b border-[var(--border)] last:border-0">
-                <td className="px-5 py-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar src={c.profile_pic} name={c.username || c.ig_user_id} size={34} />
-                    <span className="font-medium">
-                      {c.username ? `@${c.username}` : `usuário ${c.ig_user_id}`}
-                    </span>
-                  </div>
-                </td>
-                <td className="mono px-5 py-3 text-[var(--muted)]">{c.ig_user_id}</td>
-                <td className="px-5 py-3 text-[var(--muted)]">{fmt(c.first_seen)}</td>
-                <td className="px-5 py-3 text-[var(--muted)]">{fmt(c.last_message_at)}</td>
+    <AppShell title="Contatos" action={!loading && contacts.length > 0 ? count : undefined}>
+      {loading && (
+        <div className="flex justify-center py-24">
+          <Spinner />
+        </div>
+      )}
+
+      {!loading && error && (
+        <Note variant="warning">
+          Não foi possível carregar seus contatos. Verifique a conexão e tente de novo
+        </Note>
+      )}
+
+      {!loading && !error && contacts.length === 0 && (
+        <Card padding="none">
+          <EmptyState
+            icon={Users}
+            title="Nenhum contato ainda"
+            description="Quem comentar ou mandar DM vira contato automaticamente"
+          />
+        </Card>
+      )}
+
+      {!loading && !error && contacts.length > 0 && (
+        <Card padding="none" className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
+            <thead>
+              <tr className="h-9 border-b border-line text-left text-xs text-fg-3">
+                <th className="px-5 font-normal">Contato</th>
+                <th className="px-5 font-normal">ID do Instagram</th>
+                <th className="px-5 text-right font-normal">Primeiro contato</th>
+                <th className="px-5 text-right font-normal">Última mensagem</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {contacts.map((c) => (
+                <tr key={c.id} className="h-12 border-b border-line last:border-b-0">
+                  <td className="px-5">
+                    <div className="flex items-center gap-3">
+                      <Avatar src={c.profile_pic} name={c.username || c.ig_user_id} size={28} />
+                      <span className="text-sm text-fg">
+                        {c.username ? `@${c.username}` : `usuário ${c.ig_user_id}`}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-5 font-mono text-xs text-fg-3">{c.ig_user_id}</td>
+                  <td className="px-5 text-right font-mono text-xs text-fg-3">
+                    {formatDateTime(c.first_seen)}
+                  </td>
+                  <td className="px-5 text-right font-mono text-xs text-fg-3">
+                    {formatDateTime(c.last_message_at)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Card>
+      )}
     </AppShell>
   );
 }

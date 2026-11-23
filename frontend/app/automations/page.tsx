@@ -2,29 +2,50 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Plus, Workflow, KeyRound, MessageSquareReply, MessageCircle, Camera, AtSign, Pencil, Trash2 } from "lucide-react";
+import { Pencil, Plus, Trash2, Workflow } from "lucide-react";
 import AppShell from "@/components/AppShell";
+import {
+  Button,
+  Card,
+  EmptyState,
+  IconButton,
+  KeywordTokens,
+  Note,
+  Spinner,
+  Toggle,
+  cx,
+} from "@/components/ui";
 import { useAccount } from "@/lib/account";
+import { TRIGGER_TEXT, type Trigger } from "@/lib/automation";
 
-type Trigger = "comment_any" | "comment_keyword" | "dm_keyword" | "dm_any" | "story_reply" | "story_mention";
 type Automation = {
   id: number;
   name: string;
   trigger: Trigger;
   keyword: string | null;
   enabled: boolean;
-};
-
-const TRIGGER_LABEL: Record<Trigger, string> = {
-  comment_keyword: "comentário",
-  comment_any: "qualquer comentário",
-  dm_keyword: "DM",
-  dm_any: "qualquer DM (padrão)",
-  story_reply: "resposta ao story",
-  story_mention: "menção em story",
+  post_id: string | null;
+  bind_next: boolean;
+  graph?: { nodes?: { type?: string }[] } | null;
 };
 
 type LoadState = "loading" | "ready" | "error";
+
+const isComment = (t: Trigger) => t === "comment_any" || t === "comment_keyword";
+const hasKeyword = (a: Automation) =>
+  !!a.keyword && (a.trigger === "comment_keyword" || a.trigger === "dm_keyword" || a.trigger === "story_reply");
+
+function scopeText(a: Automation): string {
+  if (!isComment(a.trigger)) return "—";
+  if (a.post_id) return "Publicação específica";
+  if (a.bind_next) return "Próxima publicação";
+  return "Todas as publicações";
+}
+
+function messageCount(a: Automation): number {
+  const nodes = a.graph?.nodes ?? [];
+  return nodes.filter((n) => (n.type ?? "message") === "message").length;
+}
 
 export default function AutomationsPage() {
   const { accountId, resolved } = useAccount();
@@ -56,9 +77,7 @@ export default function AutomationsPage() {
         body: JSON.stringify({ enabled: !a.enabled }),
       });
       if (res.ok) {
-        setItems((prev) =>
-          prev.map((x) => (x.id === a.id ? { ...x, enabled: !x.enabled } : x))
-        );
+        setItems((prev) => prev.map((x) => (x.id === a.id ? { ...x, enabled: !x.enabled } : x)));
       }
     } finally {
       setBusy(null);
@@ -66,8 +85,7 @@ export default function AutomationsPage() {
   }
 
   async function remove(a: Automation) {
-    if (!confirm(`Excluir a automação "${a.name || "Sem nome"}"? Isso não pode ser desfeito.`))
-      return;
+    if (!confirm(`Excluir a automação "${a.name || "Sem nome"}"? Isso não pode ser desfeito.`)) return;
     setBusy(a.id);
     try {
       const res = await fetch(`/api/backend/automations/${a.id}`, { method: "DELETE" });
@@ -78,99 +96,98 @@ export default function AutomationsPage() {
   }
 
   const newButton = (
-    <Link href="/automations/new" className="btn-gold inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm">
-      <Plus size={16} /> Nova automação
-    </Link>
+    <Button variant="primary" size="sm" icon={Plus} href="/automations/new">
+      Nova automação
+    </Button>
   );
 
   return (
     <AppShell title="Automações" action={newButton}>
-      {state === "ready" && items.length > 0 ? (
-        <div className="glass divide-y divide-[var(--border)] overflow-hidden">
-          {items.map((a) => (
-            <div
-              key={a.id}
-              className={`flex items-center gap-4 px-5 py-4 ${busy === a.id ? "opacity-50" : ""}`}
-            >
-              <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[var(--gold)]/10 text-[var(--gold)]">
-                {a.trigger === "story_mention" ? (
-                  <AtSign size={16} />
-                ) : a.trigger === "story_reply" ? (
-                  <Camera size={16} />
-                ) : a.trigger.startsWith("dm") ? (
-                  <MessageCircle size={16} />
-                ) : a.keyword ? (
-                  <KeyRound size={16} />
-                ) : (
-                  <MessageSquareReply size={16} />
-                )}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">{a.name || "Sem nome"}</p>
-                <p className="mono truncate text-xs text-[var(--muted)]">
-                  {a.keyword
-                    ? `${TRIGGER_LABEL[a.trigger]}: "${a.keyword}"`
-                    : TRIGGER_LABEL[a.trigger]}
-                </p>
-              </div>
-
-              {/* Toggle ativar/desativar */}
-              <button
-                type="button"
-                onClick={() => toggleEnabled(a)}
-                disabled={busy === a.id}
-                title={a.enabled ? "Desativar" : "Ativar"}
-                className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-                  a.enabled ? "bg-[var(--green)]" : "bg-white/15"
-                }`}
-              >
-                <span
-                  className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
-                    a.enabled ? "left-[18px]" : "left-0.5"
-                  }`}
-                />
-              </button>
-
-              <span className="mono w-14 text-center text-[10px] text-[var(--muted)]">
-                {a.enabled ? "ativa" : "pausada"}
-              </span>
-
-              {/* Ações */}
-              <Link
-                href={`/automations/${a.id}/edit`}
-                title="Editar"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-white/5 hover:text-white"
-              >
-                <Pencil size={15} />
-              </Link>
-              <button
-                type="button"
-                onClick={() => remove(a)}
-                disabled={busy === a.id}
-                title="Excluir"
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted)] hover:bg-red-500/10 hover:text-red-400"
-              >
-                <Trash2 size={15} />
-              </button>
-            </div>
-          ))}
+      {state === "loading" && (
+        <div className="flex justify-center py-24">
+          <Spinner />
         </div>
-      ) : (
-        /* Estado vazio (também cobre backend offline) */
-        <div className="glass flex flex-col items-center justify-center px-6 py-20 text-center">
-          <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--gold)]/10 text-[var(--gold)]">
-            <Workflow size={26} />
-          </span>
-          <h3 className="text-lg font-semibold">Nenhuma automação ainda</h3>
-          <p className="mt-1 max-w-sm text-sm text-[var(--muted)]">
-            {state === "error"
-              ? "Não consegui carregar (backend offline). Você ainda pode criar e ver o preview."
-              : "Crie sua primeira automação: comentário com palavra-chave → DM automática."}
-          </p>
-          <Link href="/automations/new" className="btn-gold mt-6 inline-flex items-center gap-2 rounded-lg px-5 py-2.5 text-sm">
-            <Plus size={16} /> Criar automação
-          </Link>
-        </div>
+      )}
+
+      {state === "error" && (
+        <Note variant="warning">
+          Não foi possível carregar suas automações. Verifique a conexão e tente de novo
+        </Note>
+      )}
+
+      {state === "ready" && items.length === 0 && (
+        <Card padding="none">
+          <EmptyState
+            icon={Workflow}
+            title="Nenhuma automação"
+            description="Responda comentários e DMs automaticamente"
+            action={
+              <Button variant="secondary" href="/automations/new">
+                Nova automação
+              </Button>
+            }
+          />
+        </Card>
+      )}
+
+      {state === "ready" && items.length > 0 && (
+        <Card padding="none">
+          <ul>
+            {items.map((a) => {
+              const n = messageCount(a);
+              return (
+                <li
+                  key={a.id}
+                  className={cx(
+                    "flex min-h-16 flex-wrap items-center gap-x-6 gap-y-2 border-b border-line px-4 py-3 last:border-b-0",
+                    busy === a.id && "opacity-50"
+                  )}
+                >
+                  <div className="min-w-[220px] flex-1">
+                    <p className="truncate text-sm font-medium text-fg">{a.name || "Sem nome"}</p>
+                    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-fg-2">
+                      {TRIGGER_TEXT[a.trigger]}
+                      {hasKeyword(a) && <KeywordTokens value={a.keyword} />}
+                    </p>
+                  </div>
+
+                  <p className="hidden w-44 text-[13px] text-fg-2 lg:block">{scopeText(a)}</p>
+
+                  <p className="hidden w-24 font-mono text-xs text-fg-3 md:block">
+                    {n} {n === 1 ? "mensagem" : "mensagens"}
+                  </p>
+
+                  <div className="flex w-28 items-center gap-2">
+                    <Toggle
+                      checked={a.enabled}
+                      onChange={() => toggleEnabled(a)}
+                      disabled={busy === a.id}
+                      aria-label={a.enabled ? "Pausar automação" : "Ativar automação"}
+                    />
+                    <span className="text-[13px] text-fg-2">{a.enabled ? "Ativa" : "Pausada"}</span>
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <Link
+                      href={`/automations/${a.id}/edit`}
+                      aria-label="Editar"
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-control text-fg-3 transition-[background-color,color] duration-150 ease-out hover:bg-raised hover:text-fg"
+                    >
+                      <Pencil size={16} strokeWidth={1.5} />
+                    </Link>
+                    <IconButton
+                      icon={Trash2}
+                      tone="danger"
+                      aria-label="Excluir"
+                      onClick={() => remove(a)}
+                      disabled={busy === a.id}
+                    />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </Card>
       )}
     </AppShell>
   );
