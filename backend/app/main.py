@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.config_check import config_problems
+from app.core.log_redaction import install as mask_invite_tokens_in_logs
 from app.routers import (
     admin,
     auth,
@@ -25,6 +26,7 @@ logging.basicConfig(level=logging.INFO)
 # O httpx loga cada URL em INFO — com query strings que podem ter segredos
 # (ex.: troca/renovação de token). Só avisos e erros.
 logging.getLogger("httpx").setLevel(logging.WARNING)
+mask_invite_tokens_in_logs()
 logger = logging.getLogger("inboxpilot")
 
 
