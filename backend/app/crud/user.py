@@ -30,8 +30,12 @@ async def create(
     *,
     is_admin: bool = False,
     must_change_password: bool = True,
+    commit: bool = True,
 ) -> User:
-    """Cria o usuário. `password` em texto: o hash é feito aqui."""
+    """Cria o usuário. `password` em texto: o hash é feito aqui.
+
+    `commit=False` só faz flush: o chamador fecha a transação (cadastro).
+    """
     check_policy(password)
     user = User(
         email=normalize_email(email),
@@ -41,20 +45,36 @@ async def create(
         must_change_password=must_change_password,
     )
     db.add(user)
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     await db.refresh(user)
     return user
 
 
 async def set_password(
-    db: AsyncSession, user: User, password: str, *, must_change: bool = False
+    db: AsyncSession,
+    user: User,
+    password: str,
+    *,
+    must_change: bool = False,
+    commit: bool = True,
 ) -> User:
     check_policy(password)
     user.password_hash = hash_password(password)
     user.must_change_password = must_change
-    await db.commit()
+    if commit:
+        await db.commit()
+    else:
+        await db.flush()
     await db.refresh(user)
     return user
+
+
+async def list_all(db: AsyncSession) -> list[User]:
+    result = await db.execute(select(User).order_by(User.created_at, User.id))
+    return list(result.scalars().all())
 
 
 async def touch_login(db: AsyncSession, user: User) -> None:

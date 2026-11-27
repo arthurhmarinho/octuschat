@@ -52,6 +52,13 @@ async def current_user(
     return user
 
 
+async def require_admin(user: User = Depends(current_user)) -> User:
+    """Dependency: usuário logado que administra o painel."""
+    if not user.is_admin:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Só administradores")
+    return user
+
+
 def _state_sig(payload: str) -> str:
     key = f"oauth-state:{settings.api_secret}".encode()
     return hmac.new(key, payload.encode(), hashlib.sha256).hexdigest()
