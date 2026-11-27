@@ -154,47 +154,80 @@ cp .env.example .env               # preencher (ver tabela acima)
 cd frontend
 npm install
 cp .env.example .env.local         # BACKEND_URL, SESSION_SECRET, BACKEND_API_SECRET
-npm run dev                        # http://localhost:3000 → tela de login (crie um usuário antes: ver "Usuários e testadores")
+npm run dev                        # http://localhost:3000 → tela de login (crie o 1º admin antes: ver "Usuários e testadores")
 ```
 
 ## Usuários e testadores
 
-Não há cadastro pela tela: quem administra cria o usuário por linha de comando
-(a partir de `backend/`, com o `.env` do ambiente alvo):
+Não há cadastro aberto: entra quem recebe um **link de convite**, criado pelo
+admin no painel. O backend não envia e-mail — o link é copiado e mandado por
+WhatsApp, DM ou outro canal.
+
+### Convidar alguém
+
+Enquanto o app da Meta estiver em **modo de desenvolvimento**, só conta do
+Instagram adicionada como **Testador do Instagram** (e que aceitou o convite)
+consegue autorizar o app. Quem não é testador vê um erro da própria Meta e não
+volta para o painel. Adicionar o testador é manual, no painel da Meta.
+
+**O dono:**
+
+1. **Configurações → Pessoas → Convidar pessoa**: nome, e-mail (opcional) e o
+   **@ do Instagram** da pessoa.
+2. **Copiar** o link (`/cadastro?c=…`) e mandar. Ele **aparece só uma vez** (o
+   banco guarda o hash), vale **7 dias** e serve uma vez. Perdeu? **Copiar novo
+   link** gera outro e invalida o anterior.
+3. Na Meta (link **Funções do app na Meta** no próprio card:
+   developers.facebook.com → o app → *Funções* → *Funções*): adicionar o @ como
+   **Testador do Instagram**.
+4. Voltar ao painel e clicar em **Já adicionei**. Até lá, a pessoa vê que está
+   aguardando a liberação.
+
+**A pessoa:** abre o link, cria a conta (senha de pelo menos 10 caracteres) e cai
+no assistente **`/conectar`**:
+
+1. deixar a conta **profissional** (Criador ou Empresa): *Instagram →
+   Configurações → Tipo de conta e ferramentas*;
+2. **aceitar o convite de testador** em
+   https://www.instagram.com/accounts/manage_access/ → *Convites de testador*,
+   logada no @ certo;
+3. **Conectar Instagram**;
+4. ativar **Permitir acesso às mensagens** (*Configurações → Mensagens e
+   respostas aos stories → Ferramentas conectadas*) — sem isso, as DMs não chegam;
+5. criar a primeira automação.
+
+Os passos 1 e 4 são marcados pela própria pessoa (a API não informa isso com
+segurança; fica guardado no navegador). Se ela conectar um @ diferente do
+convidado, o assistente avisa, sem bloquear.
+
+No card, cada pessoa aparece como **Convite pendente**, **Aguardando
+Instagram**, **Ativa** ou **Precisa reconectar**. Convite vencido sai da lista:
+crie outro. Não há, pelo painel, como excluir usuário nem transferir uma conta do
+Instagram entre usuários.
+
+### Senha esquecida
+
+**Configurações → Pessoas → Gerar link de redefinição de senha**: link
+`/redefinir-senha?c=…`, vale **24 horas** e serve uma vez (gerar outro invalida o
+anterior). Quem o abre define a senha nova e já entra. Sessões abertas em outros
+aparelhos continuam valendo (o cookie não é guardado no banco; para derrubar
+todas, troque `SESSION_SECRET`).
+
+### Pela linha de comando
+
+Para criar o **primeiro admin** e para emergências (ex.: o próprio admin esqueceu
+a senha). A partir de `backend/`, com o `.env` do ambiente alvo:
 
 ```bash
 # o dono: admin, e fica com as contas do Instagram que ainda não têm dono
 python -m scripts.create_user --email dono@x.com --name "Arthur" --admin --claim-orphans
-# um testador
-python -m scripts.create_user --email testador@x.com --name "Fulano"
 # esqueceu a senha: gera outra temporária
-python -m scripts.create_user --email testador@x.com --reset-password
+python -m scripts.create_user --email dono@x.com --reset-password
 ```
 
-O script imprime uma **senha temporária, uma única vez** (mande por um canal
-privado). No primeiro acesso a pessoa é levada a trocá-la (mínimo de 10
-caracteres). `--claim-orphans` só vale com `--admin`; se houver contas sem dono
-e a flag não vier, o script avisa. A migração 0005 não cria usuário: depois de
-subir a versão com multiusuário, rode o comando do dono.
-
-### Como adicionar um testador
-
-Na ordem, **depois** do deploy:
-
-1. **Meta App** (developers.facebook.com → o app → *App roles* → *Roles*):
-   adicione a pessoa como **Instagram Tester** pelo @ do Instagram dela. Com o
-   app em modo de desenvolvimento, sem esse papel a Meta recusa o OAuth e não
-   entrega os webhooks da conta.
-2. **A pessoa**, no Instagram:
-   - a conta precisa ser **profissional** (Criador ou Empresa);
-   - aceitar o convite em *Configurações → Apps e sites → Convites de testador*
-     (no navegador: instagram.com/accounts/manage_access);
-   - em *Configurações → Mensagens → Ferramentas conectadas*, ativar **Permitir
-     acesso às mensagens** (sem isso, as DMs pela API falham).
-3. **Crie o usuário** dela com `scripts.create_user` (acima) e envie a senha temporária.
-4. Ela entra em `/login`, troca a senha, vai em **Configurações → Conectar
-   Instagram** e cria uma automação de teste (ex.: comentário com a palavra-chave
-   `TESTE` num post dela).
+O script imprime uma **senha temporária, uma única vez**, trocada no primeiro
+acesso. `--claim-orphans` só vale com `--admin`; se houver contas sem dono e a
+flag não vier, o script avisa. A migração 0005 não cria usuário.
 
 ### Saúde do token da Meta
 
@@ -267,6 +300,10 @@ cd backend
 | `0001` | Baseline do schema que já existia (o Supabase foi marcado com `alembic stamp 0001`) |
 | `0002` | Cifra os tokens: `access_token` → `access_token_enc` (exige `TOKEN_ENCRYPTION_KEYS`) |
 | `0003` | Cria a fila `webhook_events` |
+| `0004` | Unifica o conteúdo das automações no grafo |
+| `0005` | Usuários do painel, dono das contas do Instagram e marca de token recusado |
+| `0006` | Execuções de flow (`flow_runs`) |
+| `0007` | Convites por link (`user_invites`) — só cria tabela |
 
 **Banco que já existia sem Alembic:** rode `check_schema` e, se conferir,
 `alembic stamp 0001` (não rode `upgrade` na baseline).
