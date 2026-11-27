@@ -3,27 +3,34 @@
 import { useEffect, useState } from "react";
 import { Note } from "@/components/ui";
 
-type Status = "ok" | "error" | "owned";
+const FAILURE = "Não foi possível conectar a conta do Instagram. Tente de novo";
 
-/** Resultado do callback do OAuth (`?connected=ok|error`, e `&reason=owned`). */
+/** Um texto para cada `reason` que o callback do backend manda. */
+const REASONS: Record<string, string> = {
+  denied:
+    "A conexão foi cancelada na tela do Instagram. Para continuar, tente de novo e permita o acesso",
+  exchange: "A Meta não concluiu a conexão. Tente de novo em instantes",
+  owned: "Essa conta do Instagram já está ligada a outro usuário",
+  state: "O link de conexão expirou, tente de novo",
+};
+
+/** Resultado do callback do OAuth (`?connected=ok|error` e `&reason=`). */
 export default function ConnectNotice() {
-  const [status, setStatus] = useState<Status | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
-    const v = q.get("connected");
-    if (v === "ok") setStatus("ok");
-    else if (v === "error") setStatus(q.get("reason") === "owned" ? "owned" : "error");
+    const result = q.get("connected");
+    if (result === "ok") setNotice({ ok: true, text: "Conta do Instagram conectada" });
+    else if (result === "error") {
+      setNotice({ ok: false, text: REASONS[q.get("reason") ?? ""] ?? FAILURE });
+    }
   }, []);
 
-  if (!status) return null;
+  if (!notice) return null;
   return (
-    <Note variant={status === "ok" ? "info" : "warning"} className="mb-4">
-      {status === "ok"
-        ? "Conta do Instagram conectada"
-        : status === "owned"
-          ? "Essa conta do Instagram já está ligada a outro usuário"
-          : "Não foi possível conectar a conta do Instagram. Tente de novo"}
+    <Note variant={notice.ok ? "info" : "warning"} className="mb-4">
+      {notice.text}
     </Note>
   );
 }

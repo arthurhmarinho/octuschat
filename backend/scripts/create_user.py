@@ -1,4 +1,9 @@
-"""Cria usuários do painel (convite) e redefine senhas.
+"""Cria usuários do painel e redefine senhas pela linha de comando.
+
+O caminho normal agora é o PAINEL: Configurações → Pessoas gera o link de
+convite (a pessoa cria a própria conta) e o link de redefinição de senha. Este
+script fica para criar o PRIMEIRO admin e para emergências (ex.: o próprio
+admin esqueceu a senha).
 
 Exemplos (a partir de `backend/`, com o `.env` do ambiente alvo):
 

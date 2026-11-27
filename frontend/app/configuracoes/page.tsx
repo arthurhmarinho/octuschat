@@ -4,6 +4,7 @@ import AppShell from "@/components/AppShell";
 import Avatar from "@/components/Avatar";
 import ConnectNotice from "@/components/ConnectNotice";
 import PasswordForm from "@/components/PasswordForm";
+import PeopleCard from "@/components/PeopleCard";
 import { Button, Card, Note, Spinner, StatusDot } from "@/components/ui";
 import { useAccount } from "@/lib/account";
 import { formatDateTime } from "@/lib/format";
@@ -98,6 +99,8 @@ export default function ConfiguracoesPage() {
             </>
           )}
         </Card>
+
+        {user?.is_admin && <PeopleCard />}
       </div>
     </AppShell>
   );

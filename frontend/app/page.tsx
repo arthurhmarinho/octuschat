@@ -281,25 +281,11 @@ export default function Home() {
         <ConnectNotice />
         <Card className="max-w-xl">
           <h2 className="text-[15px] font-medium text-fg">Conecte sua conta do Instagram</h2>
-          <p className="mt-1 text-sm text-fg-2">
-            Depois de conectar, suas automações, contatos e conversas aparecem aqui.
+          <p className="mb-4 mt-1 text-sm text-fg-2">
+            Depois de conectar, suas automações, contatos e conversas aparecem aqui
           </p>
-          <ol className="my-4 space-y-3">
-            {[
-              "Sua conta precisa ser profissional (Criador ou Empresa)",
-              "Aceite o convite de testador em Instagram → Configurações → Apps e sites",
-              "Clique em Conectar Instagram",
-            ].map((step, i) => (
-              <li key={step} className="flex items-start gap-3 text-sm text-fg-2">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-strong font-mono text-xs text-fg-3">
-                  {i + 1}
-                </span>
-                {step}
-              </li>
-            ))}
-          </ol>
-          <Button variant="primary" href="/api/backend/instagram/connect">
-            Conectar Instagram
+          <Button variant="primary" href="/conectar">
+            Continuar configuração
           </Button>
         </Card>
       </AppShell>
