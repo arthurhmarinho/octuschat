@@ -1,12 +1,19 @@
 /**
- * Exige login em todo o app, exceto login e páginas legais (que a Meta
- * precisa acessar publicamente).
+ * Exige login em todo o app, exceto login, os links de convite (cadastro e
+ * redefinição de senha) e as páginas legais (que a Meta precisa acessar).
  */
 
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/session";
 
-const PUBLIC_PATHS = ["/login", "/api/auth/", "/privacidade", "/exclusao-de-dados"];
+const PUBLIC_PATHS = [
+  "/login",
+  "/cadastro",
+  "/redefinir-senha",
+  "/api/auth/",
+  "/privacidade",
+  "/exclusao-de-dados",
+];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((p) =>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
+import { failDelay, setSessionCookie } from "@/lib/authServer";
 import { SECRET_HEADER, backendBase } from "@/lib/backend";
-import { SESSION_COOKIE, SESSION_MAX_AGE, createSessionToken } from "@/lib/session";
 
 export const runtime = "nodejs";
 
@@ -31,8 +31,7 @@ export async function POST(req: Request) {
   }
 
   const fail = async () => {
-    // Atraso fixo: freia tentativa de força bruta sem precisar de estado.
-    await new Promise((r) => setTimeout(r, 1000));
+    await failDelay();
     return NextResponse.json({ detail: BAD_LOGIN }, { status: 401 });
   };
   if (!email || !password) return fail();
@@ -61,12 +60,6 @@ export async function POST(req: Request) {
 
   const user = (await upstream.json()) as { id: number; must_change_password: boolean };
   const res = NextResponse.json({ ok: true, must_change_password: user.must_change_password });
-  res.cookies.set(SESSION_COOKIE, await createSessionToken(sessionSecret, user.id), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: SESSION_MAX_AGE,
-  });
+  await setSessionCookie(res, sessionSecret, user.id);
   return res;
 }

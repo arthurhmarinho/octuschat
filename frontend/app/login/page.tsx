@@ -100,7 +100,7 @@ export default function LoginPage() {
           </Button>
 
           <p className="mt-4 text-[13px] text-fg-3">
-            Não tem acesso? Peça um convite a quem administra o painel
+            Recebeu um convite? Abra o link que te mandaram para criar sua conta
           </p>
         </form>
       </Card>
