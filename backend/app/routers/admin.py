@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app import crud
 from app.core.auth import require_admin
 from app.core.config import settings
+from app.core.config_check import config_problems
 from app.core.database import get_session
 from app.core.invite_fields import InvalidField, clean_email, clean_ig_username, clean_name
 from app.models.invite import RESET, SIGNUP, UserInvite
@@ -107,6 +108,12 @@ def _user_status(accounts: list[PersonAccount]) -> str:
     if any(a.needs_reconnect for a in accounts):
         return "needs_reconnect"
     return "active"
+
+
+@router.get("/diagnostics")
+async def diagnostics() -> dict[str, list[str]]:
+    """Problemas de configuração do servidor (só o nome da variável e o que há)."""
+    return {"problems": config_problems(settings)}
 
 
 @router.get("/people", response_model=PeopleRead)

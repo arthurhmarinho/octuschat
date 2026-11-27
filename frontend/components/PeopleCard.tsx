@@ -205,6 +205,13 @@ export default function PeopleCard() {
   const [inviting, setInviting] = useState(false);
   const [link, setLink] = useState<Link | null>(null);
   const [busy, setBusy] = useState(false);
+  const [problems, setProblems] = useState<string[]>([]);
+
+  useEffect(() => {
+    call<{ problems: string[] }>("/admin/diagnostics")
+      .then((r) => setProblems(r.problems))
+      .catch(() => {}); // é só um aviso: a lista segue sem ele
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -286,6 +293,14 @@ export default function PeopleCard() {
           </Button>
         )}
       </div>
+
+      {problems.length > 0 && (
+        <Note variant="warning" className="mt-4">
+          {problems.map((p) => (
+            <p key={p}>Configuração do servidor com problema: {p}</p>
+          ))}
+        </Note>
+      )}
 
       {inviting && (
         <InviteForm

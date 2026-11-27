@@ -292,6 +292,79 @@ async def test_atraso_retoma_no_no_seguinte(db, meta, pg_sessions):
     assert (await the_run(db)).status == "completed"
 
 
+# ═══ Servidor que dormiu (plano grátis do Render) ═══
+
+
+async def sleep_through(db, contact_igsid, hours):
+    """Como se o servidor tivesse dormido: a última DM e o prazo ficam no passado."""
+    c = await contact(db, contact_igsid)
+    c.last_inbound_at = datetime.now(timezone.utc) - timedelta(hours=hours)
+    await db.execute(
+        text("update flow_runs set resume_at = now() - make_interval(hours => :h) where contact_id=:c"),
+        {"h": hours - 1, "c": c.id},
+    )
+    await db.commit()
+
+
+async def test_ao_acordar_retoma_o_que_venceu_e_expira_o_que_passou_da_janela(db, meta, pg_sessions):
+    delayed = g3([msg("a", "Primeiro"), {"id": "d", "type": "delay", "hours": 1}, msg("b", "Segundo")],
+                 [edge("a", "d"), edge("d", "b")])
+    await add_auto(db, delayed, trigger=TriggerType.DM_ANY)
+    for sender in ("cedo", "tarde"):
+        await dm(db, "oi", f"m-{sender}", sender=sender)
+    await sleep_through(db, "cedo", 10)    # venceu há 9 h, janela ainda aberta
+    await sleep_through(db, "tarde", 30)   # venceu há 29 h, janela fechada
+    meta.calls.clear()
+
+    worker = WebhookWorker(session_factory=pg_sessions)
+    assert await worker.run_flows() == 2
+    assert meta.sent() == [("send", "cedo", "Segundo")]
+    by_status = {r.status: r for r in await runs(db)}
+    assert set(by_status) == {"completed", "expired"}
+    assert by_status["expired"].last_error == "outside_window"
+    assert await worker.run_flows() == 0
+
+
+async def test_timeout_vencido_durante_o_sono_expira_sem_enviar(db, meta, pg_sessions):
+    graph = g3([qr(timeout_hours=2), msg("t", "Ainda aí?")], [edge("n1", "t", "timeout")])
+    await add_auto(db, graph, trigger=TriggerType.DM_ANY)
+    await dm(db, "oi", "m1")
+    await sleep_through(db, "u1", 26)
+    meta.calls.clear()
+    await WebhookWorker(session_factory=pg_sessions).run_flows()
+    assert meta.sent() == []
+    run = await the_run(db)
+    assert run.status == "expired" and run.last_error == "outside_window"
+
+
+async def test_uma_falha_na_retomada_nao_derruba_o_resto_do_lote(db, meta, pg_sessions, monkeypatch):
+    """Depois de dormir vêm várias vencidas juntas: o erro de uma não pode travar as outras."""
+    delayed = g3([msg("a", "Primeiro"), {"id": "d", "type": "delay", "hours": 1}, msg("b", "Segundo")],
+                 [edge("a", "d"), edge("d", "b")])
+    await add_auto(db, delayed, trigger=TriggerType.DM_ANY)
+    for sender in ("quebra", "segue"):
+        await dm(db, "oi", f"m-{sender}", sender=sender)
+    first, second = await runs(db)
+    for offset, run in ((2, first), (1, second)):   # a que quebra é reservada primeiro
+        await db.execute(text("update flow_runs set resume_at = now() - make_interval(mins => :m) where id=:i"),
+                         {"m": offset, "i": run.id})
+    await db.commit()
+    meta.calls.clear()
+
+    calls = []
+
+    async def token(_db, account):
+        calls.append(account.ig_user_id)
+        if len(calls) == 1:
+            raise RuntimeError("falha inesperada")
+        return "TOKEN"
+
+    monkeypatch.setattr(token_service, "get_valid_token", token)
+    assert await WebhookWorker(session_factory=pg_sessions).run_flows() == 2
+    assert meta.sent() == [("send", "segue", "Segundo")]
+    assert [r.status for r in await runs(db)] == ["failed", "completed"]
+
+
 async def test_imagem_e_enviada_pela_send_api(db, meta):
     graph = g3([msg("a", "Olha isso"), {"id": "i", "type": "image", "url": "https://x.com/a.png"}],
                [edge("a", "i")])

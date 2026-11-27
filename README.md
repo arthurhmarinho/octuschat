@@ -91,13 +91,18 @@ registra em `message_logs` (evita responder 2x).
 | `MIGRATIONS_DATABASE_URL` | não | URL só para as migrações. No Supabase: *Session pooler* (porta 5432). Vazio = usa `DATABASE_URL` |
 | `API_SECRET` | sim | Segredo compartilhado com o proxy do frontend. Vazio = API recusa tudo |
 | `TOKEN_ENCRYPTION_KEYS` | sim | Chave(s) Fernet dos tokens, separadas por vírgula (a 1ª cifra). **Perder a chave = reconectar o Instagram** |
-| `META_APP_ID` / `META_APP_SECRET` | sim | App da Meta (o secret também valida o webhook) |
+| `META_APP_ID` / `META_APP_SECRET` | sim | **ID do app do Instagram** (só números) e a chave dele (o secret também valida o webhook). Ver "Configuração da Meta" |
 | `WEBHOOK_VERIFY_TOKEN` | sim | Token que você repete no painel da Meta |
 | `OAUTH_REDIRECT_URI` | sim | `https://SEU_BACKEND/instagram/callback` |
 | `FRONTEND_URL` | sim | Para onde o OAuth volta (ex.: `https://seu-app.vercel.app`) |
 | `ENVIRONMENT` | não | `production` desliga `/docs` |
 | `WEBHOOK_WORKER_ENABLED` | não | `true` (padrão) roda o worker dentro do servidor web |
 | `GRAPH_API_VERSION` / `DB_ECHO` | não | `v21.0` / `false` |
+
+Ao subir, o backend confere essas variáveis e registra no log um erro por
+problema encontrado (linhas `Configuração: …`, só com o nome da variável, nunca o
+valor). Ele **não** deixa de subir por isso, para o webhook não sair do ar. O
+admin vê a mesma lista no card **Pessoas** (`GET /admin/diagnostics`).
 
 ### Frontend (`frontend/.env.local` em dev · painel da Vercel em produção)
 
@@ -316,10 +321,32 @@ e `WEBHOOK_WORKER_ENABLED=false` no serviço web.
   migração e o deploy anterior continua no ar).
 - O plano free do Render dorme após ~15 min sem tráfego; o próprio webhook o
   acorda (a Meta reenvia se estourar o timeout, e a dedupe evita duplicar).
+  Para as esperas dos fluxos dispararem na hora, ver a seção abaixo.
+
+## Manter o backend acordado
+
+O worker que retoma os nós **Esperar** e os prazos de **Pergunta** / respostas
+rápidas roda dentro do servidor web. No plano grátis do Render a instância dorme
+após ~15 min sem tráfego, e dormindo nada é retomado.
+
+Crie um ping a cada **10 minutos** em `https://<backend>/health`, em um serviço
+grátis como o [cron-job.org](https://cron-job.org) ou o
+[UptimeRobot](https://uptimerobot.com). A rota é pública, aceita `GET` e `HEAD`
+e não toca no banco.
+
+**Sem o ping:** as esperas disparam **atrasadas**, só quando algo acorda o
+servidor (um webhook ou alguém abrindo o painel). Se nesse momento já tiverem
+passado **24 h** da última DM do contato, a execução termina como `expirada`
+(`outside_window`) e nada é enviado.
+
+A alternativa definitiva é um plano pago do Render, em que a instância não dorme.
 
 ## Configuração da Meta
 
 1. Crie um app em https://developers.facebook.com/apps e adicione **Instagram**.
+   `META_APP_ID` e `META_APP_SECRET` são o **ID e a chave secreta do app do
+   Instagram**, da tela **Configuração da API com login do Instagram**. O ID tem
+   só números. **Não** é o ID do app do Facebook, que aparece no topo do painel.
 2. Webhook → `https://SEU_BACKEND/webhooks/instagram` com o `WEBHOOK_VERIFY_TOKEN`.
 3. Assine os campos **comments** e **messages**.
 4. Conecte a conta pelo painel: **Configurações → Conectar Instagram**.

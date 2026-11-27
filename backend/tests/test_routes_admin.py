@@ -8,6 +8,7 @@ from app import crud
 from app.core.config import settings
 from tests.conftest import requires_pg
 from tests.test_routes_cadastro import (  # noqa: F401  (world é fixture)
+    SECRET,
     expire,
     hdr,
     info,
@@ -56,6 +57,7 @@ async def test_link_de_reset_novo_invalida_o_anterior(world):
 
 @pytest.mark.parametrize("method,path", [
     ("get", "/admin/people"),
+    ("get", "/admin/diagnostics"),
     ("post", "/admin/invites"),
     ("post", "/admin/invites/1/meta-added"),
     ("post", "/admin/invites/1/renew"),
@@ -158,3 +160,11 @@ async def test_reset_link_nao_vale_para_si_nem_para_quem_nao_existe(world):
     assert r.status_code == 400
     r = await world["c"].post("/admin/users/999999/reset-link", headers=hdr(admin.id))
     assert r.status_code == 404
+
+
+async def test_diagnostics_lista_os_problemas_sem_os_valores(world, monkeypatch):
+    monkeypatch.setattr(settings, "meta_app_id", "valor-que-nao-pode-vazar")
+    r = await world["c"].get("/admin/diagnostics", headers=hdr(world["admin"].id))
+    assert r.status_code == 200
+    assert any(p.startswith("META_APP_ID") for p in r.json()["problems"])
+    assert "valor-que-nao-pode-vazar" not in r.text and SECRET not in r.text

@@ -426,7 +426,7 @@ async def process_inbound_message(
     else:
         source, kind = "dm", "Mensagem"
     # Menção sem texto: registra um marcador legível na conversa.
-    inbound_text = text or "📸 Mencionou você em um story"
+    inbound_text = text or "Mencionou você em um story"
 
     already = bool(mid) and await crud.message_log.exists_for_comment(db, mid)
     existing = await crud.contact.find(db, account_id, sender_id)
@@ -530,7 +530,12 @@ async def resume_due_runs(
     """
     limiter = limiter or NoLimit()
     runs = await crud.flow_run.claim_due(db, limit)
-    for run in runs:
+    for run_id in [r.id for r in runs]:
+        # Relê a cada volta: o rollback de uma falha expira tudo o que a sessão
+        # carregou, inclusive as outras execuções já reservadas.
+        run = await db.get(FlowRun, run_id, populate_existing=True)
+        if run is None:  # a automação (ou o contato) foi apagada nesse meio-tempo
+            continue
         try:
             await _resume_one(db, run, limiter)
         except SendDeferred as deferred:
@@ -540,9 +545,11 @@ async def resume_due_runs(
                 resume_at=datetime.now(timezone.utc) + timedelta(seconds=deferred.delay),
             )
         except Exception as exc:  # noqa: BLE001
-            logger.exception("Falha ao retomar a execução %s: %s", run.id, exc)
+            logger.exception("Falha ao retomar a execução %s: %s", run_id, exc)
             await db.rollback()
-            await crud.flow_run.finish(db, run, "failed", redact_secrets(str(exc))[:2000])
+            run = await db.get(FlowRun, run_id, populate_existing=True)
+            if run is not None:
+                await crud.flow_run.finish(db, run, "failed", redact_secrets(str(exc))[:2000])
     return len(runs)
 
 

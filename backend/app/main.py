@@ -7,8 +7,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.core import crypto
 from app.core.config import settings
+from app.core.config_check import config_problems
 from app.routers import (
     admin,
     auth,
@@ -31,12 +31,10 @@ logger = logging.getLogger("inboxpilot")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # O schema é gerido pelo Alembic (`alembic upgrade head`), não no startup.
-    if not settings.api_secret:
-        logger.warning("API_SECRET vazio — todas as rotas protegidas vão responder 401.")
-    if not crypto.is_configured():
-        logger.error(
-            "TOKEN_ENCRYPTION_KEYS ausente ou inválida — não dá para ler os tokens da Meta."
-        )
+    # Configuração errada vai para o log, mas NÃO derruba o boot: um boot
+    # quebrado no Render tiraria o webhook do ar.
+    for problem in config_problems(settings):
+        logger.error("Configuração: %s", problem)
 
     # Worker da fila de webhooks: task asyncio no mesmo processo.
     worker_task = None
