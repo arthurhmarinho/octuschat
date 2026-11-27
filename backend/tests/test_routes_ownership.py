@@ -211,6 +211,9 @@ async def test_connect_grava_o_uid_no_state(world):
     assert auth.verify_oauth_state(state) == world["a"].id
 
 
+_REAL_CLIENT = httpx.AsyncClient
+
+
 @pytest.fixture
 def meta_ok(monkeypatch, fernet_key):
     """Mocka as chamadas da Meta no callback; `meta_user` define qual conta volta."""
@@ -244,7 +247,7 @@ async def test_callback_de_a_numa_conta_de_b_da_reason_owned(world, meta_ok):
     state = auth.make_oauth_state(world["a"].id)
     r = await world["c"].get(f"/instagram/callback?code=abc&state={state}", follow_redirects=False)
     assert r.status_code in (302, 307)
-    assert r.headers["location"].endswith("?connected=error&reason=owned")
+    assert r.headers["location"].endswith("/conectar?connected=error&reason=owned")
     # o token do B não foi sobrescrito
     async with world["sessions"]() as db:
         acc = await crud.account.get(db, "b1")
@@ -256,7 +259,7 @@ async def test_callback_grava_o_dono_e_limpa_token_invalid_at(world, meta_ok):
     meta_ok["user_id"] = "novo-ig"
     state = auth.make_oauth_state(world["a"].id)
     r = await world["c"].get(f"/instagram/callback?code=abc&state={state}", follow_redirects=False)
-    assert r.headers["location"].endswith("?connected=ok")
+    assert r.headers["location"] == f"{settings.frontend_url}/conectar?connected=ok"
     r = await world["c"].get("/instagram/accounts", headers=hdr(world["a"].id))
     assert {x["ig_user_id"] for x in r.json()} == {"a1", "novo-ig"}
     r = await world["c"].get("/instagram/accounts", headers=hdr(world["b"].id))
@@ -266,17 +269,57 @@ async def test_callback_grava_o_dono_e_limpa_token_invalid_at(world, meta_ok):
 async def test_callback_com_state_invalido_ou_antigo(world, meta_ok):
     c = world["c"]
     r = await c.get("/instagram/callback?code=abc&state=lixo", follow_redirects=False)
-    assert r.headers["location"].endswith("?connected=error")
+    assert r.headers["location"].endswith("/conectar?connected=error&reason=state")
     # formato antigo (3 partes)
     import time
     ts, nonce = str(int(time.time())), "n"
     sig = auth._state_sig(f"{ts}.{nonce}")  # noqa: SLF001
     r = await c.get(f"/instagram/callback?code=abc&state={ts}.{nonce}.{sig}", follow_redirects=False)
-    assert r.headers["location"].endswith("?connected=error")
+    assert r.headers["location"].endswith("/conectar?connected=error&reason=state")
     # uid inexistente (assinado certo, mas o usuário não existe)
     state = auth.make_oauth_state(424242)
     r = await c.get(f"/instagram/callback?code=abc&state={state}", follow_redirects=False)
-    assert r.headers["location"].endswith("?connected=error")
+    assert r.headers["location"].endswith("/conectar?connected=error&reason=state")
+
+
+async def test_callback_cancelado_pela_pessoa_da_reason_denied(world, meta_ok):
+    state = auth.make_oauth_state(world["a"].id)
+    for query in (f"error=access_denied&error_reason=user_denied&state={state}",
+                  "error=access_denied"):
+        r = await world["c"].get(f"/instagram/callback?{query}", follow_redirects=False)
+        assert r.headers["location"].endswith("/conectar?connected=error&reason=denied")
+
+
+def _falha_http(request):
+    return httpx.Response(400, json={"error_message": "Invalid authorization code"})
+
+
+def _falha_rede(request):
+    raise httpx.ConnectError("sem rede client_secret=abc123", request=request)
+
+
+def _corpo_estranho(request):
+    return httpx.Response(200, text="<html>manutenção</html>")
+
+
+def _sem_token(request):
+    return httpx.Response(200, json={})
+
+
+@pytest.mark.parametrize("handler", [_falha_http, _falha_rede, _corpo_estranho, _sem_token])
+async def test_callback_com_falha_na_troca_do_code_nao_da_500(
+    world, meta_ok, monkeypatch, caplog, handler
+):
+    real = _REAL_CLIENT
+    monkeypatch.setattr(
+        instagram_router.httpx, "AsyncClient",
+        lambda **kw: real(transport=httpx.MockTransport(handler)),
+    )
+    state = auth.make_oauth_state(world["a"].id)
+    r = await world["c"].get(f"/instagram/callback?code=abc&state={state}", follow_redirects=False)
+    assert r.status_code in (302, 307)
+    assert r.headers["location"].endswith("/conectar?connected=error&reason=exchange")
+    assert "abc123" not in caplog.text
 
 
 # ── F.0: gatilho x primeiro nó no PATCH ───────────────────

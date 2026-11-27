@@ -55,24 +55,43 @@ async def connect(user: User = Depends(current_user)):
     )
 
 
+def _back(result: str, reason: str | None = None) -> RedirectResponse:
+    """Volta para o assistente `/conectar` com o resultado da conexão.
+
+    `reason` (a tela tem uma mensagem para cada): `denied`, `exchange`,
+    `owned`, `state`.
+    """
+    params = {"connected": result, **({"reason": reason} if reason else {})}
+    base = settings.frontend_url.rstrip("/")
+    return RedirectResponse(f"{base}/conectar?{urlencode(params)}")
+
+
 @router.get("/callback")
 async def callback(
-    code: str = "", state: str = "", db: AsyncSession = Depends(get_session)
+    code: str = "",
+    state: str = "",
+    error: str = "",
+    error_reason: str = "",
+    db: AsyncSession = Depends(get_session),
 ):
     """Troca o `code` por access token e persiste a conta.
 
     Rota pública: a Meta redireciona o browser para cá. O `state` assinado
     garante que o fluxo foi iniciado por nós (via `/connect` autenticado).
     """
+    if error or error_reason:  # a pessoa cancelou na tela da Meta
+        logger.info("OAuth cancelado/recusado na tela da Meta.")
+        return _back("error", "denied")
+
     owner_id = verify_oauth_state(state)
     if owner_id is None:
         logger.warning("OAuth callback com state inválido/expirado — rejeitado.")
-        return RedirectResponse(f"{settings.frontend_url}?connected=error")
+        return _back("error", "state")
     if await crud.user.get(db, owner_id) is None:
         logger.warning("OAuth callback de usuário inexistente (%s) — rejeitado.", owner_id)
-        return RedirectResponse(f"{settings.frontend_url}?connected=error")
+        return _back("error", "state")
     if not code:
-        return RedirectResponse(f"{settings.frontend_url}?connected=error")
+        return _back("error")
 
     data = {
         "client_id": settings.meta_app_id,
@@ -81,18 +100,23 @@ async def callback(
         "redirect_uri": settings.oauth_redirect_uri,
         "code": code,
     }
-    async with httpx.AsyncClient(timeout=15) as client:
-        resp = await client.post(
-            "https://api.instagram.com/oauth/access_token", data=data
-        )
-        resp.raise_for_status()
-        payload = resp.json()
-
-    ig_user_id = str(payload.get("user_id", ""))
-    access_token = payload.get("access_token", "")
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                "https://api.instagram.com/oauth/access_token", data=data
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+        ig_user_id = str(payload.get("user_id", ""))
+        access_token = payload.get("access_token", "")
+    # ValueError/AttributeError: corpo que não é o JSON esperado.
+    except (httpx.HTTPError, ValueError, AttributeError) as exc:
+        logger.warning("Falha na troca do code por token: %s", redact_secrets(str(exc)))
+        return _back("error", "exchange")
 
     if not (ig_user_id and access_token):
-        return RedirectResponse(f"{settings.frontend_url}?connected=error")
+        logger.warning("Troca do code não devolveu user_id e access_token.")
+        return _back("error", "exchange")
 
     # Troca o token curto (~1h) pelo de longa duração (~60 dias).
     expires_at = None
@@ -103,7 +127,7 @@ async def callback(
             seconds=longlived.get("expires_in", 0)
         )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Falha ao trocar por token longo: %s", exc)
+        logger.warning("Falha ao trocar por token longo: %s", redact_secrets(str(exc)))
 
     # Busca perfil: username + o `id` (usado no webhook, difere do user_id).
     username = None
@@ -128,7 +152,7 @@ async def callback(
         )
     except AccountOwnedByOther:
         logger.warning("Conta IG %s já pertence a outro usuário — recusada.", ig_user_id)
-        return RedirectResponse(f"{settings.frontend_url}?connected=error&reason=owned")
+        return _back("error", "owned")
     # Token novo: some a marca de "Meta recusou o token" (código 190).
     if account.token_invalid_at is not None:
         account.token_invalid_at = None
@@ -142,7 +166,7 @@ async def callback(
         logger.warning("Falha ao inscrever webhooks: %s", exc)
 
     logger.info("Conta IG %s (%s) conectada.", ig_user_id, username)
-    return RedirectResponse(f"{settings.frontend_url}?connected=ok")
+    return _back("ok")
 
 
 @router.get("/accounts", response_model=list[AccountRead])
