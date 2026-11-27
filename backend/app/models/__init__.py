@@ -4,6 +4,7 @@ from app.models.account import InstagramAccount
 from app.models.automation import Automation, TriggerType
 from app.models.contact import Contact
 from app.models.flow_run import FlowRun
+from app.models.invite import UserInvite
 from app.models.message import Message
 from app.models.message_log import MessageLog
 from app.models.user import User
@@ -15,6 +16,7 @@ __all__ = [
     "TriggerType",
     "Contact",
     "FlowRun",
+    "UserInvite",
     "Message",
     "MessageLog",
     "User",
